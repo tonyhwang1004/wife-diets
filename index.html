@@ -424,6 +424,28 @@
     gap: 10px;
     border: 1px solid var(--border);
   }
+  .food-time {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    background: var(--accent-bg);
+    padding: 4px 8px;
+    border-radius: 6px;
+    min-width: 44px;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .food-time:hover {
+    background: var(--accent-soft);
+  }
+  .food-time-empty {
+    color: var(--ink-muted);
+    background: var(--bg-secondary);
+  }
   .food-name {
     font-size: 14px;
     font-weight: 500;
@@ -867,6 +889,7 @@ let state = {
     waterGoal: 2000,
     weightUnit: 'kg',
     apiKey: '',
+    openaiKey: '',
     cycle: { lastPeriod: null, length: 28, duration: 5 }
   }
 };
@@ -908,7 +931,8 @@ function loadAll() {
     if (raw) {
       const loaded = JSON.parse(raw);
       state = { ...state, ...loaded };
-      if (!state.settings) state.settings = { goal: 1500, waterGoal: 2000, weightUnit: 'kg', apiKey: '', cycle: { lastPeriod: null, length: 28, duration: 5 } };
+      if (!state.settings) state.settings = { goal: 1500, waterGoal: 2000, weightUnit: 'kg', apiKey: '', openaiKey: '', cycle: { lastPeriod: null, length: 28, duration: 5 } };
+      if (state.settings.openaiKey === undefined) state.settings.openaiKey = '';
       if (!state.settings.cycle) state.settings.cycle = { lastPeriod: null, length: 28, duration: 5 };
       if (!state.daily) state.daily = {};
     }
@@ -1093,6 +1117,7 @@ function renderMeals() {
       const div = document.createElement('div');
       div.className = 'food-item';
       div.innerHTML = `
+        ${item.time ? `<div class="food-time" onclick="editFoodTime('${m}', ${idx})" title="시간 수정">${item.time}</div>` : `<div class="food-time food-time-empty" onclick="editFoodTime('${m}', ${idx})" title="시간 추가">--:--</div>`}
         <div style="flex:1;min-width:0;">
           <div class="food-name">${item.name}</div>
           <div class="food-detail">${item.portion || ''} · ${Math.round(item.cal)}kcal · 탄${Math.round(item.c||0)} 단${Math.round(item.p||0)} 지${Math.round(item.f||0)}</div>
@@ -1119,6 +1144,7 @@ function renderMeals() {
       const div = document.createElement('div');
       div.className = 'food-item';
       div.innerHTML = `
+        ${ex.time ? `<div class="food-time" onclick="editExerciseTime(${idx})" title="시간 수정">${ex.time}</div>` : `<div class="food-time food-time-empty" onclick="editExerciseTime(${idx})" title="시간 추가">--:--</div>`}
         <div style="flex:1;">
           <div class="food-name">${ex.name}</div>
           <div class="food-detail">${ex.duration}분 · -${Math.round(ex.cal)}kcal</div>
@@ -1143,6 +1169,69 @@ function deleteExercise(idx) {
   getDay().exercise.splice(idx, 1);
   saveAll();
   render();
+}
+
+function editFoodTime(meal, idx) {
+  const item = getDay().foods[meal][idx];
+  const current = item.time || '';
+  const html = `
+    <div class="modal-title">시간 수정</div>
+    <div class="modal-sub">${item.name} - 먹은 시간을 설정하세요</div>
+    <div class="form-row">
+      <label class="form-label">시간 (HH:MM)</label>
+      <input type="time" id="edit-time-input" value="${current}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveEditTime('food','${meal}',${idx})">저장</button>
+    </div>
+  `;
+  showCustomModal(html);
+}
+
+function editExerciseTime(idx) {
+  const ex = getDay().exercise[idx];
+  const current = ex.time || '';
+  const html = `
+    <div class="modal-title">시간 수정</div>
+    <div class="modal-sub">${ex.name} - 운동한 시간을 설정하세요</div>
+    <div class="form-row">
+      <label class="form-label">시간 (HH:MM)</label>
+      <input type="time" id="edit-time-input" value="${current}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveEditTime('exercise','',${idx})">저장</button>
+    </div>
+  `;
+  showCustomModal(html);
+}
+
+function saveEditTime(type, meal, idx) {
+  const newTime = document.getElementById('edit-time-input').value;
+  if (type === 'food') {
+    getDay().foods[meal][idx].time = newTime;
+    // 시간순 재정렬
+    getDay().foods[meal].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  } else {
+    getDay().exercise[idx].time = newTime;
+    getDay().exercise.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  }
+  saveAll();
+  closeModal();
+  render();
+}
+
+function showCustomModal(html) {
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  modal.innerHTML = html;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => {
+    const firstInput = modal.querySelector('input, textarea');
+    if (firstInput) firstInput.focus();
+  }, 100);
 }
 
 // ============================================================
@@ -1249,6 +1338,12 @@ function getModalContent(type, data) {
       </div>
 
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+        <div style="font-family:var(--font-display);font-size:15px;font-style:italic;margin-bottom:6px;">OpenAI Whisper API 키 <span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:2px 6px;border-radius:4px;font-style:normal;">음성 인식</span></div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-bottom:10px;">정확한 음성 인식용 (선택). <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent);">platform.openai.com</a>에서 발급. 없으면 기본 음성 인식 사용</div>
+        <input type="password" id="set-openai-key" value="${state.settings.openaiKey || ''}" placeholder="sk-...">
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
         <button class="btn" style="width:100%;color:var(--rose);" onclick="if(confirm('정말 모든 데이터를 삭제할까요?')){localStorage.removeItem('${STORAGE_KEY}');location.reload();}">전체 데이터 삭제</button>
       </div>
 
@@ -1294,6 +1389,8 @@ function getModalContent(type, data) {
   }
 
   if (type === 'exercise') {
+    const now = new Date();
+    const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     return `
       <div class="modal-title">운동 기록</div>
       <div class="modal-sub">소모 칼로리를 추정해드릴게요</div>
@@ -1314,9 +1411,15 @@ function getModalContent(type, data) {
           <option value="청소,3">집안일/청소</option>
         </select>
       </div>
-      <div class="form-row">
-        <label class="form-label">시간 (분)</label>
-        <input type="number" id="exercise-duration" value="30" min="1">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="form-row">
+          <label class="form-label">시간 (분)</label>
+          <input type="number" id="exercise-duration" value="30" min="1">
+        </div>
+        <div class="form-row">
+          <label class="form-label">한 시각</label>
+          <input type="time" id="exercise-time" value="${defaultTime}">
+        </div>
       </div>
       <div class="form-row">
         <label class="form-label">체중 (소모 칼로리 계산용)</label>
@@ -1354,18 +1457,30 @@ function getModalContent(type, data) {
 
   if (type === 'aiPreview') {
     const items = data.items || [];
+    // 현재 시간을 기본값으로
+    const now = new Date();
+    const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     return `
       <div class="modal-title">✦ AI 분석 결과</div>
-      <div class="modal-sub">확인하고 수정한 뒤 저장하세요</div>
+      <div class="modal-sub">시간과 내용 확인 후 저장하세요</div>
       <div id="preview-list">
         ${items.map((item, i) => `
           <div class="preview-item" data-idx="${i}">
             <div class="preview-item-header">
               <input type="text" data-field="name" value="${item.name}" style="flex:1;font-weight:500;">
-              <select data-field="meal" style="width:80px;padding:6px;">
-                ${['아침','점심','저녁','간식'].map(m => `<option value="${m}" ${item.meal===m?'selected':''}>${m}</option>`).join('')}
-              </select>
               <button onclick="this.closest('.preview-item').remove()" style="width:28px;height:28px;color:var(--rose);">×</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+              <div>
+                <label class="form-label">끼니</label>
+                <select data-field="meal" style="width:100%;padding:6px;">
+                  ${['아침','점심','저녁','간식'].map(m => `<option value="${m}" ${item.meal===m?'selected':''}>${m}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="form-label">시간</label>
+                <input type="time" data-field="time" value="${item.time || defaultTime}" style="width:100%;padding:6px;">
+              </div>
             </div>
             <div class="preview-grid">
               <div><label class="form-label">kcal</label><input type="number" data-field="cal" value="${item.cal}"></div>
@@ -1417,6 +1532,7 @@ function saveSettings() {
   state.settings.cycle.length = parseInt(document.getElementById('set-cycle-length').value) || 28;
   state.settings.cycle.duration = parseInt(document.getElementById('set-cycle-duration').value) || 5;
   state.settings.apiKey = document.getElementById('set-api-key').value.trim();
+  state.settings.openaiKey = document.getElementById('set-openai-key').value.trim();
   saveAll();
   closeModal();
   render();
@@ -1445,8 +1561,11 @@ function saveExercise() {
   const [type, met] = document.getElementById('exercise-type').value.split(',');
   const duration = parseFloat(document.getElementById('exercise-duration').value) || 0;
   const weight = parseFloat(document.getElementById('exercise-weight').value) || 60;
+  const time = document.getElementById('exercise-time')?.value || '';
   const cal = Math.round(parseFloat(met) * weight * (duration / 60));
-  getDay().exercise.push({ name: type, duration, cal });
+  getDay().exercise.push({ name: type, duration, cal, time });
+  // 시간순 정렬
+  getDay().exercise.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   saveAll();
   closeModal();
   render();
@@ -1476,11 +1595,14 @@ function saveAIPreview() {
     getDay().foods[meal].push({
       name: data.name,
       portion: data.portion,
+      time: data.time || '',
       cal: data.cal,
       c: data.c,
       p: data.p,
       f: data.f
     });
+    // 시간순 정렬
+    getDay().foods[meal].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   });
   saveAll();
   closeModal();
@@ -1523,6 +1645,8 @@ async function analyzeWithAI(text) {
 
 규칙:
 - 끼니(meal)는 "아침", "점심", "저녁", "간식" 중 하나. 언급 없으면 "${defaultMeal}".
+- 시간(time)은 "HH:MM" 형식. 사용자가 "아침 8시", "오후 2시", "저녁 7시반" 같이 언급하면 추출. 없으면 빈 문자열 "".
+  - "아침"="07:30", "점심"="12:30", "저녁"="19:00", "오후 4시"="16:00" 정도로 추정 가능
 - 한국인 표준 1인분 기준으로 칼로리/영양소 추정.
 - 수량이 명시되면 반영 (예: "공기밥 2그릇" = 칼로리 2배).
 - 영양소는 g 단위 정수.
@@ -1530,7 +1654,7 @@ async function analyzeWithAI(text) {
 응답 형식 (JSON만, 마크다운 없이):
 {
   "items": [
-    {"name": "음식이름", "portion": "1인분/100g/1그릇 등", "meal": "아침|점심|저녁|간식", "cal": 칼로리, "c": 탄수g, "p": 단백g, "f": 지방g}
+    {"name": "음식이름", "portion": "1인분/100g/1그릇 등", "meal": "아침|점심|저녁|간식", "time": "HH:MM 또는 빈문자열", "cal": 칼로리, "c": 탄수g, "p": 단백g, "f": 지방g}
   ]
 }`;
 
@@ -1632,15 +1756,17 @@ async function analyzeWithAI(text) {
 }
 
 // ============================================================
-// 음성 인식
+// 음성 인식 (Whisper API 우선, 폴백으로 브라우저 기본)
 // ============================================================
 let recognition = null;
 let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingMode = 'browser'; // 'whisper' or 'browser'
 
 function setupSpeech() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    document.getElementById('voice-btn').style.display = 'none';
     return;
   }
   recognition = new SpeechRecognition();
@@ -1669,21 +1795,122 @@ function setupSpeech() {
   };
 }
 
-document.getElementById('voice-btn').onclick = () => {
-  if (!recognition) {
-    alert('이 브라우저는 음성 인식을 지원하지 않아요. 크롬을 써주세요.');
-    return;
-  }
-  if (isRecording) {
-    recognition.stop();
-  } else {
-    document.getElementById('ai-input').value = '';
-    document.getElementById('ai-status').style.display = 'none';
+async function startWhisperRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // 브라우저 호환 mime type 찾기
+    const mimeTypes = ['audio/webm', 'audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg'];
+    let mimeType = '';
+    for (const mt of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(mt)) {
+        mimeType = mt;
+        break;
+      }
+    }
+    
+    mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    audioChunks = [];
+    
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+    
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(track => track.stop());
+      const audioBlob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+      await transcribeWithWhisper(audioBlob);
+    };
+    
+    mediaRecorder.start();
     isRecording = true;
+    recordingMode = 'whisper';
     document.getElementById('voice-btn').classList.add('recording');
     document.getElementById('voice-label').textContent = '듣는 중...';
-    recognition.start();
+    document.getElementById('ai-input').value = '';
+    const status = document.getElementById('ai-status');
+    status.style.display = 'block';
+    status.className = 'ai-status';
+    status.textContent = '🎤 녹음 중... 음성 버튼을 다시 누르면 종료';
+    
+  } catch (err) {
+    console.error('마이크 접근 실패:', err);
+    const status = document.getElementById('ai-status');
+    status.style.display = 'block';
+    status.className = 'ai-status error';
+    status.textContent = '마이크 접근 권한이 필요해요';
   }
+}
+
+async function transcribeWithWhisper(audioBlob) {
+  const status = document.getElementById('ai-status');
+  status.style.display = 'block';
+  status.className = 'ai-status';
+  status.textContent = '✦ 음성을 텍스트로 변환 중...';
+  
+  try {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.webm');
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'ko');
+    formData.append('prompt', '한국 음식, 칼로리, 식단 기록. 김치찌개, 비빔밥, 된장찌개, 공기밥, 떡볶이, 라면, 김밥, 닭가슴살, 두부, 계란, 사과, 바나나, 아메리카노, 라떼, 우유, 요거트, 샐러드, 후무스, 크래커, 고사리, 숙주, 버섯, 오이지.');
+    
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${state.settings.openaiKey}`
+      },
+      body: formData
+    });
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Whisper API 오류 (${response.status})`);
+    }
+    
+    const data = await response.json();
+    document.getElementById('ai-input').value = data.text || '';
+    status.style.display = 'none';
+    
+  } catch (err) {
+    console.error(err);
+    status.className = 'ai-status error';
+    status.textContent = `음성 변환 오류: ${err.message}`;
+  }
+}
+
+document.getElementById('voice-btn').onclick = async () => {
+  // 녹음 중이면 종료
+  if (isRecording) {
+    if (recordingMode === 'whisper' && mediaRecorder) {
+      mediaRecorder.stop();
+      isRecording = false;
+      document.getElementById('voice-btn').classList.remove('recording');
+      document.getElementById('voice-label').textContent = '음성';
+    } else if (recognition) {
+      recognition.stop();
+    }
+    return;
+  }
+  
+  // OpenAI 키가 있으면 Whisper 사용 (정확도 높음)
+  if (state.settings.openaiKey && state.settings.openaiKey.startsWith('sk-')) {
+    await startWhisperRecording();
+    return;
+  }
+  
+  // 폴백: 브라우저 기본 음성 인식
+  if (!recognition) {
+    alert('이 브라우저는 음성 인식을 지원하지 않아요. 크롬을 쓰거나 설정에서 OpenAI Whisper API 키를 등록해주세요.');
+    return;
+  }
+  document.getElementById('ai-input').value = '';
+  document.getElementById('ai-status').style.display = 'none';
+  isRecording = true;
+  recordingMode = 'browser';
+  document.getElementById('voice-btn').classList.add('recording');
+  document.getElementById('voice-label').textContent = '듣는 중...';
+  recognition.start();
 };
 
 document.getElementById('ai-submit').onclick = () => {
@@ -1793,6 +2020,64 @@ function renderStats() {
     const weAvg = Math.round(weekends.reduce((s,d) => s + d.net, 0) / weekends.length);
     if (weAvg > wdAvg + 200) {
       insights.push({ type: 'info', text: `주말이 평일보다 평균 ${weAvg - wdAvg} kcal 더 섭취 - 주말 관리가 핵심` });
+    }
+  }
+  
+  // 시간대별 분석 (야식 패턴)
+  let lateNightCal = 0;
+  let lateNightDays = 0;
+  let mealTimings = []; // 끼니별 평균 시간
+  
+  days.forEach(d => {
+    const data = state.daily[d.date];
+    if (!data?.foods) return;
+    let dayLateCal = 0;
+    Object.values(data.foods).forEach(meal => {
+      meal.forEach(item => {
+        if (item.time) {
+          const [h, m] = item.time.split(':').map(Number);
+          const hourFloat = h + m / 60;
+          // 21시 이후 = 야식
+          if (hourFloat >= 21 || hourFloat < 5) {
+            dayLateCal += item.cal || 0;
+          }
+        }
+      });
+    });
+    if (dayLateCal > 0) {
+      lateNightCal += dayLateCal;
+      lateNightDays++;
+    }
+  });
+  
+  if (lateNightDays >= 2) {
+    const avgLate = Math.round(lateNightCal / lateNightDays);
+    insights.push({ type: 'warn', text: `최근 ${lateNightDays}일 야식 패턴 (밤 9시 이후 평균 ${avgLate} kcal) - 다이어트의 큰 적` });
+  }
+  
+  // 마지막 식사 시간 평균
+  let lastMealTimes = [];
+  days.forEach(d => {
+    const data = state.daily[d.date];
+    if (!data?.foods) return;
+    let latestTime = '';
+    Object.values(data.foods).forEach(meal => {
+      meal.forEach(item => {
+        if (item.time && item.time > latestTime) latestTime = item.time;
+      });
+    });
+    if (latestTime) lastMealTimes.push(latestTime);
+  });
+  
+  if (lastMealTimes.length >= 3) {
+    const avgMinutes = lastMealTimes.reduce((s, t) => {
+      const [h, m] = t.split(':').map(Number);
+      return s + h * 60 + m;
+    }, 0) / lastMealTimes.length;
+    const avgH = Math.floor(avgMinutes / 60);
+    const avgM = Math.round(avgMinutes % 60);
+    if (avgH >= 20) {
+      insights.push({ type: 'info', text: `평균 마지막 식사 시간: ${String(avgH).padStart(2,'0')}:${String(avgM).padStart(2,'0')} - 19시 이전이 다이어트에 좋아요` });
     }
   }
 
