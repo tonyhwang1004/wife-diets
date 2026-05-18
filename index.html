@@ -465,6 +465,222 @@
     color: var(--ink-soft);
   }
 
+  /* 빠른 액션 버튼 */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .quick-action-btn {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 14px;
+    border: 1px solid var(--border);
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .quick-action-btn:active { transform: scale(0.97); }
+  .condition-btn {
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--rose-bg) 200%);
+  }
+  .recommend-btn {
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--gold-bg) 200%);
+  }
+  .qa-icon {
+    font-size: 20px;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+  .condition-btn .qa-icon { color: var(--rose); }
+  .recommend-btn .qa-icon { color: var(--gold); }
+  .qa-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .qa-sub {
+    font-size: 10px;
+    color: var(--ink-muted);
+    line-height: 1.2;
+  }
+
+  /* 몸상태 기록 카드 */
+  .condition-item {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--rose);
+  }
+  .condition-time {
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--rose);
+    background: var(--rose-bg);
+    padding: 3px 7px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .condition-text {
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .condition-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .condition-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--rose-bg);
+    color: var(--rose);
+    border-radius: 4px;
+  }
+  
+  /* 컨디션 선택 그리드 */
+  .cond-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .cond-chip {
+    padding: 8px 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .cond-chip:hover { border-color: var(--accent); }
+  .cond-chip.selected {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  
+  /* 코치 페이지 */
+  .coach-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .coach-card.featured {
+    background: linear-gradient(135deg, var(--accent-bg) 0%, var(--gold-bg) 100%);
+    border-color: var(--accent-soft);
+  }
+  .coach-title {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 500;
+    font-style: italic;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .coach-action-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .routine-step {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .routine-step:last-child { border-bottom: none; }
+  .routine-time {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    min-width: 50px;
+    flex-shrink: 0;
+  }
+  .routine-content {
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .routine-note {
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+  .food-rec-item {
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+  }
+  .food-rec-name {
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--accent);
+  }
+  .food-rec-reason {
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  
+  /* 누적 리포트 인사이트 */
+  .insight-big {
+    padding: 16px;
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .insight-big.positive {
+    background: var(--moss-bg);
+    color: var(--moss);
+  }
+  .insight-big.warning {
+    background: var(--rose-bg);
+    color: var(--rose);
+  }
+  .insight-big-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 500;
+    font-style: italic;
+    margin-bottom: 6px;
+  }
+  .insight-big-text {
+    font-size: 13px;
+  }
+
   /* 빈 상태 */
   .empty {
     text-align: center;
@@ -817,6 +1033,24 @@
     </div>
   </div>
 
+  <!-- 몸상태 빠른 기록 + 음식 추천 -->
+  <div class="quick-actions">
+    <button class="quick-action-btn condition-btn" onclick="openModal('condition')">
+      <span class="qa-icon">♥</span>
+      <div>
+        <div class="qa-title">몸상태 기록</div>
+        <div class="qa-sub" id="condition-summary">컨디션/소화/기분</div>
+      </div>
+    </button>
+    <button class="quick-action-btn recommend-btn" onclick="getFoodRecommendation()">
+      <span class="qa-icon">✦</span>
+      <div>
+        <div class="qa-title">AI 음식 추천</div>
+        <div class="qa-sub">지금 뭘 먹을지 고민될 때</div>
+      </div>
+    </button>
+  </div>
+
   <!-- AI 입력 -->
   <div class="ai-card">
     <div class="ai-header">
@@ -835,6 +1069,9 @@
     </div>
     <div class="ai-status" id="ai-status"></div>
   </div>
+
+  <!-- 오늘 기록된 몸상태 -->
+  <div id="conditions-list"></div>
 
   <!-- 식사 리스트 -->
   <div id="meal-list"></div>
@@ -857,10 +1094,19 @@
   <div id="weight-content"></div>
 </div>
 
+<!-- 페이지: AI 코치 -->
+<div class="page" id="page-coach">
+  <h2 style="font-size: 22px; margin: 16px 4px;">AI 코치</h2>
+  <div id="coach-content"></div>
+</div>
+
 <!-- 하단 탭 -->
 <div class="bottom-tabs">
   <button class="tab active" data-page="home" onclick="switchPage('home')">
     <span class="tab-icon">⌂</span><span>홈</span>
+  </button>
+  <button class="tab" data-page="coach" onclick="switchPage('coach')">
+    <span class="tab-icon">✦</span><span>코치</span>
   </button>
   <button class="tab" data-page="stats" onclick="switchPage('stats')">
     <span class="tab-icon">◈</span><span>통계</span>
@@ -946,9 +1192,12 @@ function getDay(date = state.currentDate) {
       weight: null,
       water: 0,
       exercise: [],
-      sleep: null
+      sleep: null,
+      conditions: []
     };
   }
+  // 이전 버전 호환
+  if (!state.daily[date].conditions) state.daily[date].conditions = [];
   return state.daily[date];
 }
 
@@ -1031,8 +1280,57 @@ function render() {
   // 생리주기
   renderCycle();
 
+  // 몸상태 요약 표시
+  renderConditionsSummary();
+
   // 식사 리스트
   renderMeals();
+}
+
+function renderConditionsSummary() {
+  const day = getDay();
+  const list = document.getElementById('conditions-list');
+  if (!list) return;
+  
+  // 빠른 액션 버튼 서브텍스트 업데이트
+  const summaryEl = document.getElementById('condition-summary');
+  if (summaryEl) {
+    if (day.conditions.length > 0) {
+      summaryEl.textContent = `오늘 ${day.conditions.length}회 기록됨`;
+    } else {
+      summaryEl.textContent = '컨디션/소화/기분';
+    }
+  }
+  
+  if (day.conditions.length === 0) {
+    list.innerHTML = '';
+    return;
+  }
+  
+  list.innerHTML = `
+    <div class="meal-section">
+      <div class="meal-header">
+        <span class="meal-title">몸상태 기록</span>
+        <span class="meal-cal">${day.conditions.length}회</span>
+      </div>
+      ${day.conditions.map((c, idx) => `
+        <div class="condition-item">
+          <div class="condition-time">${c.time || '--:--'}</div>
+          <div style="flex:1;min-width:0;">
+            ${c.note ? `<div class="condition-text">${c.note}</div>` : ''}
+            ${c.tags && c.tags.length > 0 ? `<div class="condition-tags">${c.tags.map(t => `<span class="condition-tag">${t}</span>`).join('')}</div>` : ''}
+          </div>
+          <button class="food-delete" onclick="deleteCondition(${idx})" aria-label="삭제">×</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function deleteCondition(idx) {
+  getDay().conditions.splice(idx, 1);
+  saveAll();
+  render();
 }
 
 function getWeightTrend() {
@@ -1263,6 +1561,7 @@ function switchPage(page) {
   document.querySelector(`.tab[data-page="${page}"]`).classList.add('active');
   if (page === 'stats') renderStats();
   if (page === 'weight') renderWeightPage();
+  if (page === 'coach') renderCoach();
   window.scrollTo(0, 0);
 }
 
@@ -1455,6 +1754,68 @@ function getModalContent(type, data) {
     `;
   }
 
+  if (type === 'condition') {
+    const now = new Date();
+    const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    return `
+      <div class="modal-title">몸상태 기록</div>
+      <div class="modal-sub">지금 몸 상태를 빠르게 체크하세요</div>
+      
+      <div class="form-row">
+        <label class="form-label">시간</label>
+        <input type="time" id="cond-time" value="${defaultTime}">
+      </div>
+      
+      <div class="form-row">
+        <label class="form-label">컨디션</label>
+        <div class="cond-grid" data-group="energy">
+          ${['활기참','보통','피곤함','무기력','졸림','어지러움'].map(t => `<div class="cond-chip" data-tag="${t}" onclick="toggleCondChip(this)">${t}</div>`).join('')}
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <label class="form-label">소화 상태</label>
+        <div class="cond-grid" data-group="digestion">
+          ${['좋음','더부룩','속쓰림','가스','변비','설사'].map(t => `<div class="cond-chip" data-tag="${t}" onclick="toggleCondChip(this)">${t}</div>`).join('')}
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <label class="form-label">기분</label>
+        <div class="cond-grid" data-group="mood">
+          ${['평온','행복','스트레스','우울','짜증','불안'].map(t => `<div class="cond-chip" data-tag="${t}" onclick="toggleCondChip(this)">${t}</div>`).join('')}
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <label class="form-label">기타 증상</label>
+        <div class="cond-grid" data-group="symptom">
+          ${['두통','부종','근육통','생리통','갈증','배고픔'].map(t => `<div class="cond-chip" data-tag="${t}" onclick="toggleCondChip(this)">${t}</div>`).join('')}
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <label class="form-label">추가 메모 (선택)</label>
+        <textarea id="cond-note" placeholder="예: 점심 후 너무 졸리다, 단게 너무 당김..." style="min-height:60px;resize:vertical;"></textarea>
+      </div>
+      
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">취소</button>
+        <button class="btn btn-primary" onclick="saveCondition()">저장</button>
+      </div>
+    `;
+  }
+
+  if (type === 'aiResponse') {
+    return `
+      <div class="modal-title">${data.title}</div>
+      <div style="font-size:13px;line-height:1.6;color:var(--ink);white-space:pre-wrap;margin:14px 0;">${data.content}</div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeModal()">확인</button>
+      </div>
+    `;
+  }
+
   if (type === 'aiPreview') {
     const items = data.items || [];
     // 현재 시간을 기본값으로
@@ -1579,6 +1940,28 @@ function saveSleep() {
     getDay().sleep = { hours, quality };
     saveAll();
   }
+  closeModal();
+  render();
+}
+
+function toggleCondChip(el) {
+  el.classList.toggle('selected');
+}
+
+function saveCondition() {
+  const time = document.getElementById('cond-time').value;
+  const note = document.getElementById('cond-note').value.trim();
+  const tags = [];
+  document.querySelectorAll('.cond-chip.selected').forEach(c => tags.push(c.dataset.tag));
+  
+  if (tags.length === 0 && !note) {
+    alert('태그를 선택하거나 메모를 작성해주세요');
+    return;
+  }
+  
+  getDay().conditions.push({ time, tags, note });
+  getDay().conditions.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  saveAll();
   closeModal();
   render();
 }
@@ -1931,6 +2314,394 @@ document.getElementById('ai-input').onkeydown = (e) => {
     document.getElementById('ai-submit').click();
   }
 };
+
+// ============================================================
+// AI 코치 기능
+// ============================================================
+
+function gatherContext(days = 7) {
+  // 최근 N일 데이터를 컨텍스트로 정리
+  const today = new Date(state.currentDate);
+  const data = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const ds = d.toISOString().split('T')[0];
+    const day = state.daily[ds];
+    if (!day) continue;
+    
+    let cal = 0, c = 0, p = 0, f = 0, exCal = 0;
+    const foodList = [];
+    Object.entries(day.foods || {}).forEach(([meal, items]) => {
+      items.forEach(item => {
+        cal += item.cal || 0;
+        c += item.c || 0;
+        p += item.p || 0;
+        f += item.f || 0;
+        foodList.push(`${meal}(${item.time||'?'}) ${item.name}`);
+      });
+    });
+    (day.exercise || []).forEach(e => exCal += e.cal || 0);
+    
+    const conditions = (day.conditions || []).map(c => `${c.time}: ${(c.tags||[]).join(',')}${c.note ? ' "'+c.note+'"' : ''}`);
+    
+    data.push({
+      date: ds,
+      isToday: ds === state.currentDate,
+      cal: Math.round(cal), c: Math.round(c), p: Math.round(p), f: Math.round(f),
+      exCal: Math.round(exCal),
+      weight: day.weight,
+      water: day.water,
+      sleep: day.sleep,
+      foods: foodList,
+      conditions: conditions
+    });
+  }
+  return data;
+}
+
+async function callClaude(prompt, maxTokens = 2048) {
+  if (!state.settings.apiKey) {
+    openModal('apiKey');
+    return null;
+  }
+  
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": state.settings.apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`AI 오류 ${response.status}: ${err.substring(0, 100)}`);
+  }
+  
+  const data = await response.json();
+  return data.content.filter(i => i.type === "text").map(i => i.text).join("");
+}
+
+async function getFoodRecommendation() {
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-title">✦ AI가 추천 중...</div>
+    <div style="text-align:center;padding:40px 0;">
+      <div style="font-size:32px;margin-bottom:10px;">🍽️</div>
+      <div style="color:var(--ink-soft);">몸 상태와 영양 균형 고려 중...</div>
+    </div>
+  `;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+  
+  try {
+    const today = gatherContext(1)[0] || { cal: 0, c: 0, p: 0, f: 0, foods: [], conditions: [] };
+    const weekData = gatherContext(7);
+    const now = new Date();
+    const hour = now.getHours();
+    const settings = state.settings;
+    const remaining = settings.goal - (today.cal - today.exCal);
+    
+    const prompt = `당신은 한국인을 위한 다이어트 영양 코치입니다. 사용자의 현재 상태를 보고 지금 또는 다음 끼니에 추천할 음식 3-4개를 제안해주세요.
+
+현재 시각: ${hour}시
+하루 목표: ${settings.goal} kcal
+현재 섭취: ${today.cal} kcal (남은 칼로리: ${remaining} kcal)
+오늘 매크로: 탄수 ${today.c}g, 단백 ${today.p}g, 지방 ${today.f}g
+오늘 먹은 것: ${today.foods.join(', ') || '없음'}
+오늘 몸상태: ${today.conditions.join(' | ') || '기록 없음'}
+오늘 수면: ${today.sleep ? today.sleep.hours+'시간 '+today.sleep.quality : '기록 없음'}
+오늘 물: ${today.water}ml
+이번 주 평균 칼로리: ${Math.round(weekData.reduce((s,d)=>s+d.cal,0)/Math.max(weekData.length,1))} kcal
+
+순수 JSON으로만 응답하세요. 마크다운 금지.
+{
+  "context": "현재 상황 한 줄 요약 (예: '단백질 부족, 야식 시간대')",
+  "recommendations": [
+    {"name": "음식 이름", "calories": 칼로리숫자, "reason": "추천 이유 (1-2문장, 몸상태와 연결)"}
+  ],
+  "warning": "주의사항 한 줄 (없으면 빈 문자열)"
+}`;
+
+    const responseText = await callClaude(prompt, 1500);
+    const cleaned = responseText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(cleaned);
+    
+    let content = `<div class="modal-title">✦ AI 음식 추천</div>
+      <div class="modal-sub">${result.context}</div>`;
+    
+    if (result.warning) {
+      content += `<div class="insight warn" style="margin-bottom:14px;"><span>⚠️</span><span>${result.warning}</span></div>`;
+    }
+    
+    content += '<div style="margin-bottom:16px;">';
+    result.recommendations.forEach(rec => {
+      content += `
+        <div class="food-rec-item">
+          <div class="food-rec-name">${rec.name} <span style="font-size:11px;color:var(--ink-muted);font-weight:normal;">· ${rec.calories} kcal</span></div>
+          <div class="food-rec-reason">${rec.reason}</div>
+        </div>
+      `;
+    });
+    content += '</div>';
+    
+    content += `<div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal()">닫기</button>
+    </div>`;
+    
+    modal.innerHTML = content;
+    
+  } catch (err) {
+    console.error(err);
+    modal.innerHTML = `
+      <div class="modal-title">오류</div>
+      <div class="modal-sub" style="color:var(--rose);">${err.message}</div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeModal()">닫기</button>
+      </div>
+    `;
+  }
+}
+
+async function generateRoutine() {
+  const btn = document.getElementById('gen-routine-btn');
+  if (btn) {
+    btn.textContent = '✦ 루틴 만드는 중...';
+    btn.disabled = true;
+  }
+  
+  try {
+    const weekData = gatherContext(7);
+    const today = gatherContext(1)[0];
+    const settings = state.settings;
+    
+    const prompt = `당신은 다이어트 라이프스타일 코치입니다. 이 사용자에게 맞는 오늘의 맞춤 하루 루틴을 짜주세요.
+
+기본 정보:
+- 하루 목표: ${settings.goal} kcal
+- 물 목표: ${settings.waterGoal} ml
+${today?.weight ? `- 오늘 체중: ${today.weight}${settings.weightUnit}` : ''}
+${today?.sleep ? `- 어제 수면: ${today.sleep.hours}시간 (${today.sleep.quality})` : ''}
+
+최근 7일 패턴:
+- 평균 칼로리: ${Math.round(weekData.reduce((s,d)=>s+d.cal,0)/Math.max(weekData.length,1))} kcal
+- 평균 수면: ${weekData.filter(d=>d.sleep).length > 0 ? (weekData.filter(d=>d.sleep).reduce((s,d)=>s+d.sleep.hours,0)/weekData.filter(d=>d.sleep).length).toFixed(1) : '?'}시간
+- 자주 보인 몸상태: ${[...new Set(weekData.flatMap(d => d.conditions))].slice(0,3).join(', ') || '기록 부족'}
+
+순수 JSON만 응답:
+{
+  "title": "오늘의 루틴 한 줄 컨셉 (예: '활력 충전 디톡스 데이')",
+  "focus": "오늘 집중할 것 (1문장)",
+  "schedule": [
+    {"time": "07:00", "activity": "활동명", "note": "이유나 팁 (간단)"}
+  ]
+}
+
+규칙:
+- 기상-아침-오전-점심-오후-저녁-운동-취침까지 8-10개 단계
+- 각 단계는 구체적인 시간(HH:MM)과 활동
+- 사용자의 패턴/약점을 보완하는 방향
+- 한국인 라이프스타일 고려`;
+
+    const responseText = await callClaude(prompt, 2000);
+    const cleaned = responseText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(cleaned);
+    
+    // 결과를 코치 페이지의 루틴 영역에 표시
+    const routineEl = document.getElementById('routine-result');
+    if (routineEl) {
+      routineEl.innerHTML = `
+        <div style="font-family:var(--font-display);font-style:italic;font-size:16px;margin-bottom:4px;">${result.title}</div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:14px;">${result.focus}</div>
+        ${result.schedule.map(s => `
+          <div class="routine-step">
+            <div class="routine-time">${s.time}</div>
+            <div class="routine-content">
+              ${s.activity}
+              ${s.note ? `<div class="routine-note">${s.note}</div>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      `;
+    }
+    
+  } catch (err) {
+    console.error(err);
+    alert('루틴 생성 실패: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.innerHTML = '<span>✦</span><span>새 루틴 만들기</span>';
+      btn.disabled = false;
+    }
+  }
+}
+
+async function generateWeeklyReport() {
+  const btn = document.getElementById('gen-report-btn');
+  if (btn) {
+    btn.textContent = '✦ 리포트 작성 중...';
+    btn.disabled = true;
+  }
+  
+  try {
+    const weekData = gatherContext(7);
+    const allData = gatherContext(30);
+    const settings = state.settings;
+    
+    const weightDays = allData.filter(d => d.weight);
+    const weightChange = weightDays.length >= 2 ? weightDays[weightDays.length-1].weight - weightDays[0].weight : null;
+    
+    const prompt = `당신은 친근하고 따뜻한 다이어트 코치입니다. 이 사용자의 최근 1주일을 분석해서 종합 리포트를 작성해주세요.
+
+목표: 하루 ${settings.goal} kcal, 물 ${settings.waterGoal} ml
+
+최근 7일 상세 데이터:
+${weekData.map(d => `
+[${d.date}${d.isToday?' (오늘)':''}]
+- 칼로리: ${d.cal} kcal (운동 -${d.exCal})
+- 매크로: 탄${d.c}g 단${d.p}g 지${d.f}g
+- 체중: ${d.weight ? d.weight+settings.weightUnit : '미기록'}
+- 수면: ${d.sleep ? d.sleep.hours+'h '+d.sleep.quality : '미기록'}
+- 물: ${d.water}ml
+- 식사: ${d.foods.slice(0,5).join(', ')}${d.foods.length>5 ? ' 외 '+(d.foods.length-5)+'개' : ''}
+- 몸상태: ${d.conditions.join(' | ') || '미기록'}
+`).join('\n')}
+
+${weightChange !== null ? `30일간 체중 변화: ${weightChange.toFixed(1)}${settings.weightUnit}` : ''}
+
+순수 JSON만 응답:
+{
+  "summary": "이번 주 종합 평가 (2-3문장, 친근한 톤)",
+  "wins": ["잘한 점 2-3개"],
+  "concerns": ["개선이 필요한 점 2-3개"],
+  "patterns": ["발견된 패턴 2-3개 (예: '주말마다 폭식', '수면 부족 시 단게 당김')"],
+  "next_week": ["다음 주 실천 과제 3-4개 (구체적이고 실행 가능한 것)"]
+}`;
+
+    const responseText = await callClaude(prompt, 3000);
+    const cleaned = responseText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(cleaned);
+    
+    const reportEl = document.getElementById('report-result');
+    if (reportEl) {
+      reportEl.innerHTML = `
+        <div class="insight-big positive" style="background:var(--accent-bg);color:var(--accent);">
+          <div class="insight-big-title">✦ 이번 주 종합 평가</div>
+          <div class="insight-big-text">${result.summary}</div>
+        </div>
+        
+        ${result.wins && result.wins.length > 0 ? `
+          <div class="coach-card">
+            <div class="coach-title"><span style="color:var(--moss);">◉</span> 잘하고 있는 것</div>
+            ${result.wins.map(w => `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);line-height:1.5;">• ${w}</div>`).join('')}
+          </div>
+        ` : ''}
+        
+        ${result.concerns && result.concerns.length > 0 ? `
+          <div class="coach-card">
+            <div class="coach-title"><span style="color:var(--rose);">▲</span> 개선이 필요한 점</div>
+            ${result.concerns.map(c => `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);line-height:1.5;">• ${c}</div>`).join('')}
+          </div>
+        ` : ''}
+        
+        ${result.patterns && result.patterns.length > 0 ? `
+          <div class="coach-card">
+            <div class="coach-title"><span style="color:var(--gold);">◆</span> 발견된 패턴</div>
+            ${result.patterns.map(p => `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);line-height:1.5;">• ${p}</div>`).join('')}
+          </div>
+        ` : ''}
+        
+        ${result.next_week && result.next_week.length > 0 ? `
+          <div class="coach-card featured">
+            <div class="coach-title"><span style="color:var(--accent);">✦</span> 다음 주 실천 과제</div>
+            ${result.next_week.map((n, i) => `<div style="font-size:13px;padding:8px 0;border-bottom:1px solid rgba(184,84,46,0.1);line-height:1.5;display:flex;gap:8px;">
+              <span style="color:var(--accent);font-weight:500;">${i+1}.</span>
+              <span>${n}</span>
+            </div>`).join('')}
+          </div>
+        ` : ''}
+      `;
+    }
+    
+  } catch (err) {
+    console.error(err);
+    alert('리포트 생성 실패: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.innerHTML = '<span>✦</span><span>주간 리포트 생성</span>';
+      btn.disabled = false;
+    }
+  }
+}
+
+function renderCoach() {
+  const day = getDay();
+  const weekData = gatherContext(7);
+  const recordedDays = weekData.filter(d => d.cal > 0 || d.conditions.length > 0).length;
+  
+  const content = document.getElementById('coach-content');
+  content.innerHTML = `
+    <div class="coach-card featured">
+      <div class="coach-title"><span>✦</span> AI 음식 추천</div>
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
+        지금 몸상태와 영양 균형을 고려해서 AI가 추천해드려요. 끼니 고민될 때 사용하세요.
+      </div>
+      <button class="coach-action-btn" onclick="getFoodRecommendation()">
+        <span>✦</span><span>지금 추천받기</span>
+      </button>
+    </div>
+
+    <div class="coach-card">
+      <div class="coach-title"><span style="color:var(--moss);">◯</span> 오늘의 맞춤 루틴</div>
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
+        최근 패턴과 오늘 컨디션 기반으로 AI가 하루 루틴을 짜드려요.
+      </div>
+      <div id="routine-result" style="margin-bottom:10px;"></div>
+      <button class="coach-action-btn" id="gen-routine-btn" onclick="generateRoutine()" style="background:var(--moss);">
+        <span>✦</span><span>새 루틴 만들기</span>
+      </button>
+    </div>
+
+    <div class="coach-card">
+      <div class="coach-title"><span style="color:var(--accent);">◈</span> 주간 종합 리포트</div>
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
+        ${recordedDays >= 3 
+          ? `지난 7일 데이터를 AI가 종합 분석해서 다음 주 계획까지 제시해드려요. (${recordedDays}일 기록됨)`
+          : `리포트는 최소 3일치 데이터가 필요해요. 현재 ${recordedDays}일 기록됨.`
+        }
+      </div>
+      <div id="report-result" style="margin-bottom:10px;"></div>
+      ${recordedDays >= 3 ? `
+        <button class="coach-action-btn" id="gen-report-btn" onclick="generateWeeklyReport()">
+          <span>✦</span><span>주간 리포트 생성</span>
+        </button>
+      ` : `
+        <div style="text-align:center;padding:12px;background:var(--bg-secondary);border-radius:var(--radius-sm);font-size:12px;color:var(--ink-muted);">
+          매일 식단과 몸상태를 기록해주세요
+        </div>
+      `}
+    </div>
+
+    <div class="coach-card" style="background:var(--bg-secondary);">
+      <div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">
+        💡 <strong>코치 활용 팁</strong><br>
+        • 식사 전: "지금 추천받기"로 메뉴 정하기<br>
+        • 아침: "새 루틴 만들기"로 하루 계획<br>
+        • 주말: 일주일 돌아보며 "주간 리포트"<br>
+        • 몸상태 자주 기록할수록 AI가 정확해져요
+      </div>
+    </div>
+  `;
+}
 
 // ============================================================
 // 통계 페이지
