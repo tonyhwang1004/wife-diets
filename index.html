@@ -1545,7 +1545,7 @@ async function analyzeWithAI(text) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
+        max_tokens: 4096,
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -1562,7 +1562,58 @@ async function analyzeWithAI(text) {
       .join("");
 
     responseText = responseText.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(responseText);
+    
+    // JSON 파싱 시도 - 잘린 응답에도 대응
+    let parsed;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch (parseErr) {
+      // 응답이 잘렸을 가능성 - 마지막 완전한 } 까지 잘라서 재시도
+      console.warn('JSON 파싱 실패, 복구 시도:', parseErr.message);
+      
+      // items 배열에서 완전한 객체들만 추출
+      const itemsMatch = responseText.match(/"items"\s*:\s*\[/);
+      if (itemsMatch) {
+        const startIdx = itemsMatch.index + itemsMatch[0].length;
+        const objects = [];
+        let depth = 0;
+        let currentStart = -1;
+        let inString = false;
+        let escapeNext = false;
+        
+        for (let i = startIdx; i < responseText.length; i++) {
+          const ch = responseText[i];
+          
+          if (escapeNext) { escapeNext = false; continue; }
+          if (ch === '\\') { escapeNext = true; continue; }
+          if (ch === '"') { inString = !inString; continue; }
+          if (inString) continue;
+          
+          if (ch === '{') {
+            if (depth === 0) currentStart = i;
+            depth++;
+          } else if (ch === '}') {
+            depth--;
+            if (depth === 0 && currentStart !== -1) {
+              try {
+                const obj = JSON.parse(responseText.substring(currentStart, i + 1));
+                objects.push(obj);
+              } catch (e) {}
+              currentStart = -1;
+            }
+          }
+        }
+        
+        if (objects.length > 0) {
+          parsed = { items: objects };
+          console.log(`응답이 잘렸지만 ${objects.length}개 음식 복구됨`);
+        } else {
+          throw new Error('AI 응답을 파싱할 수 없어요. 음식 개수를 줄여서 다시 시도해주세요.');
+        }
+      } else {
+        throw new Error('AI 응답 형식이 올바르지 않아요. 다시 시도해주세요.');
+      }
+    }
 
     if (!parsed.items || parsed.items.length === 0) {
       status.className = 'ai-status error';
