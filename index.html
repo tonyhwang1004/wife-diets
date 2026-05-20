@@ -465,6 +465,26 @@
     color: var(--ink-soft);
   }
 
+  /* 라디오 옵션 (온보딩용) */
+  .radio-option {
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+    display: block;
+    width: 100%;
+  }
+  .radio-option:hover { border-color: var(--accent); }
+  .radio-option.selected {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
   /* 빠른 액션 버튼 */
   .quick-actions {
     display: grid;
@@ -1136,7 +1156,24 @@ let state = {
     weightUnit: 'kg',
     apiKey: '',
     openaiKey: '',
-    cycle: { lastPeriod: null, length: 28, duration: 5 }
+    cycle: { lastPeriod: null, length: 28, duration: 5 },
+    profile: {
+      onboarded: false,
+      name: '',
+      gender: '여성',
+      age: null,
+      height: null,
+      startWeight: null,
+      targetWeight: null,
+      activityLevel: 'light', // sedentary, light, moderate, active
+      goalPace: 0.5, // kg per week
+      allergies: [],
+      avoidFoods: '',
+      preferredStyle: [], // 한식, 양식, 일식, 채식, 저탄수 등
+      exerciseHabit: 'none', // none, light, regular, intense
+      dietHistory: '',
+      voiceEnabled: true
+    }
   }
 };
 
@@ -1179,6 +1216,16 @@ function loadAll() {
       state = { ...state, ...loaded };
       if (!state.settings) state.settings = { goal: 1500, waterGoal: 2000, weightUnit: 'kg', apiKey: '', openaiKey: '', cycle: { lastPeriod: null, length: 28, duration: 5 } };
       if (state.settings.openaiKey === undefined) state.settings.openaiKey = '';
+      if (!state.settings.profile) {
+        state.settings.profile = {
+          onboarded: false,
+          name: '', gender: '여성', age: null, height: null,
+          startWeight: null, targetWeight: null,
+          activityLevel: 'light', goalPace: 0.5,
+          allergies: [], avoidFoods: '', preferredStyle: [],
+          exerciseHabit: 'none', dietHistory: '', voiceEnabled: true
+        };
+      }
       if (!state.settings.cycle) state.settings.cycle = { lastPeriod: null, length: 28, duration: 5 };
       if (!state.daily) state.daily = {};
     }
@@ -1643,6 +1690,7 @@ function getModalContent(type, data) {
       </div>
 
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+        <button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeModal();startOnboarding();">내 정보 다시 등록</button>
         <button class="btn" style="width:100%;color:var(--rose);" onclick="if(confirm('정말 모든 데이터를 삭제할까요?')){localStorage.removeItem('${STORAGE_KEY}');location.reload();}">전체 데이터 삭제</button>
       </div>
 
@@ -3057,11 +3105,540 @@ function renderWeightPage() {
 }
 
 // ============================================================
+// 온보딩 (첫 사용자 환영)
+// ============================================================
+
+// TTS - OpenAI 우선, 폴백으로 브라우저
+async function speakText(text, options = {}) {
+  if (!state.settings.profile.voiceEnabled && !options.force) return;
+  
+  // OpenAI TTS 시도
+  if (state.settings.openaiKey && state.settings.openaiKey.startsWith('sk-')) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${state.settings.openaiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          voice: 'nova',
+          input: text,
+          speed: 1.0
+        })
+      });
+      
+      if (response.ok) {
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.play();
+        return new Promise(resolve => {
+          audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+          audio.onerror = () => resolve();
+        });
+      }
+    } catch (e) {
+      console.warn('OpenAI TTS 실패, 브라우저 폴백:', e);
+    }
+  }
+  
+  // 폴백: 브라우저 내장 TTS
+  if ('speechSynthesis' in window) {
+    return new Promise(resolve => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ko-KR';
+      utterance.rate = 1.0;
+      utterance.onend = resolve;
+      utterance.onerror = resolve;
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+}
+
+function stopSpeaking() {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  document.querySelectorAll('audio').forEach(a => { a.pause(); a.currentTime = 0; });
+}
+
+// BMR 계산 (Mifflin-St Jeor)
+function calculateBMR(profile) {
+  const { gender, age, height, startWeight } = profile;
+  if (!age || !height || !startWeight) return null;
+  if (gender === '여성') {
+    return Math.round(10 * startWeight + 6.25 * height - 5 * age - 161);
+  } else {
+    return Math.round(10 * startWeight + 6.25 * height - 5 * age + 5);
+  }
+}
+
+// 활동량 계수
+const ACTIVITY_MULTIPLIERS = {
+  sedentary: 1.2,    // 거의 안 움직임
+  light: 1.375,      // 가벼운 활동 (주 1-3회)
+  moderate: 1.55,    // 보통 활동 (주 3-5회)
+  active: 1.725      // 활동적 (주 6-7회)
+};
+
+const ACTIVITY_LABELS = {
+  sedentary: '거의 안 움직임 (사무직, 운동 안 함)',
+  light: '가벼운 활동 (주 1-3회 운동)',
+  moderate: '보통 활동 (주 3-5회 운동)',
+  active: '활동적 (주 6-7회 운동)'
+};
+
+function calculateTargetCalories(profile) {
+  const bmr = calculateBMR(profile);
+  if (!bmr) return null;
+  const tdee = bmr * (ACTIVITY_MULTIPLIERS[profile.activityLevel] || 1.375);
+  const deficit = (profile.goalPace * 7700) / 7; // 1kg = 7700kcal, /주 -> /일
+  return Math.round(tdee - deficit);
+}
+
+function calculateMonthsToGoal(profile) {
+  if (!profile.startWeight || !profile.targetWeight || !profile.goalPace) return null;
+  const totalLoss = profile.startWeight - profile.targetWeight;
+  if (totalLoss <= 0) return null;
+  const weeks = totalLoss / profile.goalPace;
+  return Math.round(weeks / 4.33 * 10) / 10; // months
+}
+
+// 온보딩 단계
+let onboardingStep = 0;
+let onboardingData = {};
+
+const ONBOARDING_STEPS = [
+  {
+    id: 'welcome',
+    title: '환영합니다 ✨',
+    message: '안녕하세요! 다이어트 다이어리에 오신 것을 환영해요. 먼저 몇 가지 정보를 알려주시면, 맞춤형으로 도와드릴게요. 부담 없이 시작해볼까요?',
+    fields: [],
+    nextLabel: '시작하기'
+  },
+  {
+    id: 'apiKeys',
+    title: 'AI 기능 설정',
+    message: '음식 분석과 음성 인식, 안내 음성을 위해 API 키가 필요해요. 없으면 나중에 설정에서 입력할 수도 있어요.',
+    fields: [
+      { type: 'password', key: 'apiKey', label: 'Anthropic API 키 (음식 분석용)', placeholder: 'sk-ant-...', optional: true },
+      { type: 'password', key: 'openaiKey', label: 'OpenAI API 키 (음성 인식/안내용)', placeholder: 'sk-...', optional: true }
+    ],
+    skipSpeak: true
+  },
+  {
+    id: 'name',
+    title: '이름이 어떻게 되세요?',
+    message: '이름을 알려주세요. 가족이 부르는 별명도 좋아요.',
+    fields: [
+      { type: 'text', key: 'name', label: '이름 또는 별명', placeholder: '예: 지은', required: true }
+    ]
+  },
+  {
+    id: 'basics',
+    title: '기본 정보',
+    message: '키와 몸무게, 그리고 나이를 알려주세요. 정확한 분석을 위해 필요해요.',
+    fields: [
+      { type: 'select', key: 'gender', label: '성별', options: [{v:'여성',l:'여성'},{v:'남성',l:'남성'}], required: true },
+      { type: 'number', key: 'age', label: '나이', placeholder: '예: 35', required: true },
+      { type: 'number', key: 'height', label: '키 (cm)', placeholder: '예: 162', step: '0.1', required: true }
+    ]
+  },
+  {
+    id: 'weight',
+    title: '체중 정보',
+    message: '현재 체중과 목표 체중을 알려주세요. 무리한 목표보다는 현실적인 목표가 더 좋아요.',
+    fields: [
+      { type: 'number', key: 'startWeight', label: '현재 체중 (kg)', placeholder: '예: 66', step: '0.1', required: true },
+      { type: 'number', key: 'targetWeight', label: '목표 체중 (kg)', placeholder: '예: 58', step: '0.1', required: true }
+    ]
+  },
+  {
+    id: 'pace',
+    title: '감량 속도',
+    message: '얼마나 빠르게 빼고 싶으세요? 주당 0.5kg이 가장 건강하고 요요가 적어요.',
+    fields: [
+      { type: 'radio', key: 'goalPace', label: '목표 감량 속도', options: [
+        { v: 0.25, l: '천천히 (주 0.25kg) - 가장 안전' },
+        { v: 0.5, l: '보통 (주 0.5kg) - 권장 ⭐' },
+        { v: 0.75, l: '빠르게 (주 0.75kg)' },
+        { v: 1.0, l: '매우 빠르게 (주 1kg) - 무리할 수 있음' }
+      ], required: true, default: 0.5 }
+    ]
+  },
+  {
+    id: 'activity',
+    title: '활동량',
+    message: '평소 운동을 얼마나 하시는지 알려주세요. 활동량에 따라 필요한 칼로리가 달라져요.',
+    fields: [
+      { type: 'radio', key: 'activityLevel', label: '평소 활동량', options: [
+        { v: 'sedentary', l: '거의 안 움직임 (사무직, 운동 거의 안 함)' },
+        { v: 'light', l: '가벼운 활동 (주 1-3회 운동) ⭐' },
+        { v: 'moderate', l: '보통 활동 (주 3-5회 운동)' },
+        { v: 'active', l: '활동적 (주 6-7회 운동)' }
+      ], required: true, default: 'light' }
+    ]
+  },
+  {
+    id: 'exercise',
+    title: '운동 습관',
+    message: '평소 어떤 운동을 좋아하세요? 앞으로 운동 추천에 활용할게요.',
+    fields: [
+      { type: 'radio', key: 'exerciseHabit', label: '현재 운동 습관', options: [
+        { v: 'none', l: '운동 안 함' },
+        { v: 'light', l: '가벼운 운동 (걷기, 스트레칭)' },
+        { v: 'regular', l: '규칙적 운동 (요가, 필라테스 등)' },
+        { v: 'intense', l: '강도 높은 운동 (웨이트, 러닝 등)' }
+      ], required: true, default: 'none' }
+    ]
+  },
+  {
+    id: 'food',
+    title: '음식 취향',
+    message: '음식 취향과 못 드시는 음식이 있다면 알려주세요. 식단 추천에 반영할게요.',
+    fields: [
+      { type: 'checkbox', key: 'preferredStyle', label: '선호하는 음식 스타일 (복수 선택)', options: [
+        { v: '한식', l: '한식' },
+        { v: '양식', l: '양식' },
+        { v: '일식', l: '일식' },
+        { v: '중식', l: '중식' },
+        { v: '저탄수', l: '저탄수' },
+        { v: '채식', l: '채식 위주' },
+        { v: '고단백', l: '고단백' }
+      ]},
+      { type: 'text', key: 'avoidFoods', label: '못 먹는 음식 / 알레르기', placeholder: '예: 견과류, 갑각류 알레르기', optional: true }
+    ]
+  },
+  {
+    id: 'history',
+    title: '다이어트 이력',
+    message: '이전에 다이어트를 해본 적이 있나요? 경험을 알려주시면 더 잘 도와드릴 수 있어요.',
+    fields: [
+      { type: 'textarea', key: 'dietHistory', label: '다이어트 경험 (선택)', placeholder: '예: 작년에 5kg 뺐다가 요요로 다 돌아왔어요. 야식 끊기가 어려워요.', optional: true }
+    ]
+  },
+  {
+    id: 'voice',
+    title: '음성 안내 설정',
+    message: 'AI 음성 안내를 사용하시겠어요? 코치 메시지나 안내를 음성으로 들을 수 있어요.',
+    fields: [
+      { type: 'radio', key: 'voiceEnabled', label: '음성 안내', options: [
+        { v: true, l: '사용 (안내를 음성으로 들음)' },
+        { v: false, l: '사용 안 함 (글로만 보기)' }
+      ], required: true, default: true }
+    ]
+  }
+];
+
+async function startOnboarding() {
+  onboardingStep = 0;
+  onboardingData = { ...state.settings.profile };
+  // 기존 API 키가 있으면 보존
+  onboardingData.apiKey = state.settings.apiKey || '';
+  onboardingData.openaiKey = state.settings.openaiKey || '';
+  document.body.style.overflow = 'hidden';
+  await renderOnboardingStep();
+}
+
+async function renderOnboardingStep() {
+  stopSpeaking();
+  const step = ONBOARDING_STEPS[onboardingStep];
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  
+  const progressPct = ((onboardingStep + 1) / ONBOARDING_STEPS.length) * 100;
+  
+  let fieldsHtml = '';
+  step.fields.forEach(field => {
+    const currentVal = onboardingData[field.key];
+    if (field.type === 'text' || field.type === 'number' || field.type === 'password') {
+      fieldsHtml += `
+        <div class="form-row">
+          <label class="form-label">${field.label}${field.optional ? ' (선택)' : ''}</label>
+          <input type="${field.type}" data-key="${field.key}" value="${currentVal || ''}" placeholder="${field.placeholder || ''}" ${field.step ? `step="${field.step}"` : ''}>
+        </div>
+      `;
+    } else if (field.type === 'textarea') {
+      fieldsHtml += `
+        <div class="form-row">
+          <label class="form-label">${field.label}${field.optional ? ' (선택)' : ''}</label>
+          <textarea data-key="${field.key}" placeholder="${field.placeholder || ''}" style="min-height:80px;resize:vertical;">${currentVal || ''}</textarea>
+        </div>
+      `;
+    } else if (field.type === 'select') {
+      fieldsHtml += `
+        <div class="form-row">
+          <label class="form-label">${field.label}</label>
+          <select data-key="${field.key}">
+            ${field.options.map(o => `<option value="${o.v}" ${currentVal === o.v ? 'selected' : ''}>${o.l}</option>`).join('')}
+          </select>
+        </div>
+      `;
+    } else if (field.type === 'radio') {
+      const val = currentVal !== null && currentVal !== undefined ? currentVal : field.default;
+      fieldsHtml += `
+        <div class="form-row">
+          <label class="form-label">${field.label}</label>
+          <div style="display:flex;flex-direction:column;gap:6px;" data-radio-group="${field.key}">
+            ${field.options.map(o => `
+              <button type="button" class="radio-option ${String(val) === String(o.v) ? 'selected' : ''}" data-value="${o.v}" onclick="selectRadioOption(this,'${field.key}',${typeof o.v === 'string' ? `'${o.v}'` : o.v})">
+                ${o.l}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } else if (field.type === 'checkbox') {
+      const vals = Array.isArray(currentVal) ? currentVal : [];
+      fieldsHtml += `
+        <div class="form-row">
+          <label class="form-label">${field.label}</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;" data-checkbox-group="${field.key}">
+            ${field.options.map(o => `
+              <button type="button" class="cond-chip ${vals.includes(o.v) ? 'selected' : ''}" data-value="${o.v}" onclick="toggleCheckboxOption(this,'${field.key}','${o.v}')">${o.l}</button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+  });
+  
+  modal.innerHTML = `
+    <div style="position:relative;margin-bottom:18px;">
+      <div style="height:4px;background:var(--bg-secondary);border-radius:2px;overflow:hidden;margin-bottom:14px;">
+        <div style="height:100%;width:${progressPct}%;background:var(--accent);transition:width 0.3s;"></div>
+      </div>
+      <div style="font-size:11px;color:var(--ink-muted);text-align:center;">${onboardingStep + 1} / ${ONBOARDING_STEPS.length}</div>
+    </div>
+    <div class="modal-title">${step.title}</div>
+    <div style="font-size:13px;line-height:1.6;color:var(--ink-soft);margin-bottom:18px;display:flex;gap:8px;align-items:flex-start;">
+      <button onclick="speakText('${step.message.replace(/'/g, "\\'")}', {force:true})" style="background:var(--accent-bg);color:var(--accent);width:32px;height:32px;border-radius:50%;flex-shrink:0;font-size:14px;" title="다시 듣기">◉</button>
+      <span style="flex:1;">${step.message}</span>
+    </div>
+    ${fieldsHtml}
+    <div class="modal-actions">
+      ${onboardingStep > 0 ? `<button class="btn" onclick="prevOnboardingStep()">이전</button>` : `<button class="btn" onclick="skipOnboarding()" style="color:var(--ink-muted);">나중에 하기</button>`}
+      <button class="btn btn-primary" onclick="nextOnboardingStep()">${step.nextLabel || (onboardingStep === ONBOARDING_STEPS.length - 1 ? '완료' : '다음')}</button>
+    </div>
+  `;
+  
+  overlay.classList.add('show');
+  
+  // 음성 안내 자동 재생 (사용자가 voice 비활성화하지 않았을 경우)
+  if (!step.skipSpeak && state.settings.profile.voiceEnabled !== false) {
+    setTimeout(() => speakText(step.message), 300);
+  }
+}
+
+function selectRadioOption(el, key, value) {
+  const group = el.parentElement;
+  group.querySelectorAll('.radio-option').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  onboardingData[key] = value;
+}
+
+function toggleCheckboxOption(el, key, value) {
+  el.classList.toggle('selected');
+  if (!Array.isArray(onboardingData[key])) onboardingData[key] = [];
+  const idx = onboardingData[key].indexOf(value);
+  if (idx >= 0) onboardingData[key].splice(idx, 1);
+  else onboardingData[key].push(value);
+}
+
+function collectFieldsFromStep() {
+  const step = ONBOARDING_STEPS[onboardingStep];
+  for (const field of step.fields) {
+    if (field.type === 'text' || field.type === 'number' || field.type === 'password' || field.type === 'textarea') {
+      const el = document.querySelector(`[data-key="${field.key}"]`);
+      if (!el) continue;
+      let val = el.value.trim();
+      if (field.type === 'number' && val) val = parseFloat(val);
+      if (field.required && !val) {
+        alert(`${field.label}을(를) 입력해주세요`);
+        el.focus();
+        return false;
+      }
+      onboardingData[field.key] = val;
+    } else if (field.type === 'select') {
+      const el = document.querySelector(`select[data-key="${field.key}"]`);
+      if (el) onboardingData[field.key] = el.value;
+    }
+    // radio와 checkbox는 클릭 시 바로 저장됨
+    if (field.type === 'radio' && field.required) {
+      if (onboardingData[field.key] === null || onboardingData[field.key] === undefined || onboardingData[field.key] === '') {
+        if (field.default !== undefined) onboardingData[field.key] = field.default;
+        else { alert(`${field.label}을(를) 선택해주세요`); return false; }
+      }
+    }
+  }
+  return true;
+}
+
+async function nextOnboardingStep() {
+  if (onboardingStep > 0 && !collectFieldsFromStep()) return;
+  
+  // API 키 단계라면 즉시 저장 (다음 단계에서 음성 사용을 위해)
+  if (ONBOARDING_STEPS[onboardingStep].id === 'apiKeys') {
+    state.settings.apiKey = onboardingData.apiKey || '';
+    state.settings.openaiKey = onboardingData.openaiKey || '';
+    await saveAll();
+  }
+  
+  if (onboardingStep === ONBOARDING_STEPS.length - 1) {
+    await completeOnboarding();
+    return;
+  }
+  
+  onboardingStep++;
+  await renderOnboardingStep();
+}
+
+async function prevOnboardingStep() {
+  if (onboardingStep > 0) {
+    onboardingStep--;
+    await renderOnboardingStep();
+  }
+}
+
+function skipOnboarding() {
+  if (!confirm('나중에 설정 메뉴에서 직접 입력할 수 있어요. 건너뛸까요?')) return;
+  state.settings.profile.onboarded = true;
+  saveAll();
+  closeModal();
+  document.body.style.overflow = '';
+  render();
+}
+
+async function completeOnboarding() {
+  // 프로필 저장
+  state.settings.profile = {
+    ...state.settings.profile,
+    onboarded: true,
+    name: onboardingData.name || '',
+    gender: onboardingData.gender || '여성',
+    age: parseFloat(onboardingData.age) || null,
+    height: parseFloat(onboardingData.height) || null,
+    startWeight: parseFloat(onboardingData.startWeight) || null,
+    targetWeight: parseFloat(onboardingData.targetWeight) || null,
+    activityLevel: onboardingData.activityLevel || 'light',
+    goalPace: parseFloat(onboardingData.goalPace) || 0.5,
+    allergies: onboardingData.allergies || [],
+    avoidFoods: onboardingData.avoidFoods || '',
+    preferredStyle: onboardingData.preferredStyle || [],
+    exerciseHabit: onboardingData.exerciseHabit || 'none',
+    dietHistory: onboardingData.dietHistory || '',
+    voiceEnabled: onboardingData.voiceEnabled !== false
+  };
+  
+  state.settings.apiKey = onboardingData.apiKey || state.settings.apiKey || '';
+  state.settings.openaiKey = onboardingData.openaiKey || state.settings.openaiKey || '';
+  
+  // 목표 칼로리 자동 계산
+  const targetCal = calculateTargetCalories(state.settings.profile);
+  if (targetCal) state.settings.goal = Math.max(1200, targetCal);
+  
+  // 시작 체중을 오늘 체중으로 기록
+  if (state.settings.profile.startWeight) {
+    getDay().weight = state.settings.profile.startWeight;
+  }
+  
+  await saveAll();
+  
+  // 분석 결과 화면
+  await showAnalysisResult();
+}
+
+async function showAnalysisResult() {
+  const p = state.settings.profile;
+  const bmr = calculateBMR(p);
+  const tdee = bmr ? Math.round(bmr * (ACTIVITY_MULTIPLIERS[p.activityLevel] || 1.375)) : null;
+  const target = calculateTargetCalories(p);
+  const months = calculateMonthsToGoal(p);
+  const totalLoss = p.startWeight && p.targetWeight ? (p.startWeight - p.targetWeight).toFixed(1) : 0;
+  
+  // 단백질 권장량 (체중 1kg당 1.6g - 다이어트 중 권장)
+  const proteinGoal = p.startWeight ? Math.round(p.startWeight * 1.6) : 0;
+  
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:32px;margin-bottom:8px;">✨</div>
+      <div class="modal-title" style="text-align:center;">분석이 완료됐어요!</div>
+      <div style="font-size:13px;color:var(--ink-soft);">${p.name ? p.name + '님 ' : ''}맞춤 분석 결과예요</div>
+    </div>
+    
+    <div style="background:var(--accent-bg);padding:14px;border-radius:var(--radius);margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--accent);letter-spacing:0.1em;margin-bottom:6px;">기초대사량 (BMR)</div>
+      <div style="font-family:var(--font-display);font-size:24px;font-weight:500;">${bmr || '—'} <span style="font-size:13px;color:var(--ink-soft);">kcal</span></div>
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:4px;">가만히 있어도 소모되는 칼로리예요</div>
+    </div>
+    
+    <div style="background:var(--moss-bg);padding:14px;border-radius:var(--radius);margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--moss);letter-spacing:0.1em;margin-bottom:6px;">하루 활동 소모량 (TDEE)</div>
+      <div style="font-family:var(--font-display);font-size:24px;font-weight:500;">${tdee || '—'} <span style="font-size:13px;color:var(--ink-soft);">kcal</span></div>
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:4px;">활동량 고려한 하루 소모 칼로리예요</div>
+    </div>
+    
+    <div style="background:linear-gradient(135deg, var(--gold-bg) 0%, var(--accent-bg) 100%);padding:16px;border-radius:var(--radius);margin-bottom:14px;border:1px solid var(--accent-soft);">
+      <div style="font-size:11px;color:var(--accent);letter-spacing:0.1em;margin-bottom:6px;">⭐ 권장 하루 섭취 칼로리</div>
+      <div style="font-family:var(--font-display);font-size:32px;font-weight:500;color:var(--accent);">${target || '—'} <span style="font-size:14px;">kcal</span></div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;line-height:1.5;">
+        주당 ${p.goalPace}kg 감량 페이스<br>
+        단백질 하루 ${proteinGoal}g 이상 권장
+      </div>
+    </div>
+    
+    ${months ? `
+      <div style="background:var(--bg-secondary);padding:14px;border-radius:var(--radius);margin-bottom:14px;text-align:center;">
+        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">목표까지 예상 기간</div>
+        <div style="font-family:var(--font-display);font-size:20px;font-weight:500;">${months}개월 후</div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:4px;">${p.startWeight}kg → ${p.targetWeight}kg (총 -${totalLoss}kg)</div>
+      </div>
+    ` : ''}
+    
+    <div style="font-size:12px;color:var(--ink-soft);background:var(--bg-secondary);padding:12px;border-radius:var(--radius-sm);line-height:1.6;margin-bottom:16px;">
+      💡 <strong>시작 팁</strong><br>
+      • 매일 아침 같은 시간에 체중 재기<br>
+      • 하루 물 2L 이상 마시기<br>
+      • 잠 7시간 이상 자기<br>
+      • 무리하지 말고 천천히 ❤️
+    </div>
+    
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="finishOnboarding()" style="width:100%;">시작하기 ✨</button>
+    </div>
+  `;
+  
+  // 음성 안내
+  if (state.settings.profile.voiceEnabled !== false) {
+    const speech = `${p.name ? p.name + '님, ' : ''}분석이 완료됐어요. 기초대사량은 ${bmr}칼로리, 하루 소모량은 ${tdee}칼로리예요. 권장 하루 섭취 칼로리는 ${target}칼로리이고, 단백질은 하루 ${proteinGoal}그램 이상 드시는 게 좋아요. ${months ? `목표 체중까지 약 ${months}개월 예상돼요. ` : ''}무리하지 말고 천천히 시작해볼까요?`;
+    setTimeout(() => speakText(speech), 500);
+  }
+}
+
+function finishOnboarding() {
+  stopSpeaking();
+  closeModal();
+  document.body.style.overflow = '';
+  render();
+}
+
+// ============================================================
 // 초기화
 // ============================================================
 loadAll();
 setupSpeech();
 render();
+
+// 첫 접속 시 자동 온보딩
+if (!state.settings.profile.onboarded) {
+  setTimeout(() => startOnboarding(), 400);
+}
 </script>
 </body>
 </html>
