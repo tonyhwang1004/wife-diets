@@ -701,6 +701,58 @@
     font-size: 13px;
   }
 
+  /* 슈퍼푸드 추천 카드 */
+  .superfood-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .superfood-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .superfood-card:active { transform: scale(0.98); }
+  .superfood-card:hover { border-color: var(--accent); }
+  .sf-emoji {
+    font-size: 28px;
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+  .sf-info { flex: 1; min-width: 0; }
+  .sf-name { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+  .sf-desc { font-size: 11px; color: var(--ink-soft); line-height: 1.4; margin-bottom: 4px; }
+  .sf-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .sf-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border-radius: 4px;
+  }
+  .sf-arrow { font-size: 18px; flex-shrink: 0; opacity: 0.7; }
+  .coupang-disclosure {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    color: var(--ink-muted);
+    text-align: center;
+    line-height: 1.5;
+    border: 1px dashed var(--border-strong);
+  }
+
   /* 빈 상태 */
   .empty {
     text-align: center;
@@ -1173,7 +1225,8 @@ let state = {
       exerciseHabit: 'none', // none, light, regular, intense
       dietHistory: '',
       voiceEnabled: true
-    }
+    },
+    coupangLinks: {} // { 상품키: '본인파트너스링크' }
   }
 };
 
@@ -1216,6 +1269,7 @@ function loadAll() {
       state = { ...state, ...loaded };
       if (!state.settings) state.settings = { goal: 1500, waterGoal: 2000, weightUnit: 'kg', apiKey: '', openaiKey: '', cycle: { lastPeriod: null, length: 28, duration: 5 } };
       if (state.settings.openaiKey === undefined) state.settings.openaiKey = '';
+      if (!state.settings.coupangLinks) state.settings.coupangLinks = {};
       if (!state.settings.profile) {
         state.settings.profile = {
           onboarded: false,
@@ -1492,7 +1546,7 @@ function renderMeals() {
         ${ex.time ? `<div class="food-time" onclick="editExerciseTime(${idx})" title="시간 수정">${ex.time}</div>` : `<div class="food-time food-time-empty" onclick="editExerciseTime(${idx})" title="시간 추가">--:--</div>`}
         <div style="flex:1;">
           <div class="food-name">${ex.name}</div>
-          <div class="food-detail">${ex.duration}분 · -${Math.round(ex.cal)}kcal</div>
+          <div class="food-detail">${ex.duration}분 · -${Math.round(ex.cal)}kcal${ex.distance ? ` · ${ex.distance}km` : ''}${ex.pace ? ` · ${ex.pace}/km` : ''}${ex.hr ? ` · ♥${ex.hr}` : ''}</div>
         </div>
         <button class="food-delete" onclick="deleteExercise(${idx})">×</button>
       `;
@@ -1622,6 +1676,9 @@ function openModal(type, data) {
   overlay.classList.add('show');
   document.body.style.overflow = 'hidden';
   setTimeout(() => {
+    if (type === 'exercise') {
+      onExerciseTypeChange(); // 러닝 상세 초기 표시 (기본값 슬로우러닝)
+    }
     if (type === 'aiPreview') return;
     const firstInput = modal.querySelector('input, textarea');
     if (firstInput) firstInput.focus();
@@ -1690,6 +1747,7 @@ function getModalContent(type, data) {
       </div>
 
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+        <button class="btn" style="width:100%;margin-bottom:8px;" onclick="openCoupangSettings()">🛒 쿠팡 파트너스 링크 설정</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeModal();startOnboarding();">내 정보 다시 등록</button>
         <button class="btn" style="width:100%;color:var(--rose);" onclick="if(confirm('정말 모든 데이터를 삭제할까요?')){localStorage.removeItem('${STORAGE_KEY}');location.reload();}">전체 데이터 삭제</button>
       </div>
@@ -1743,10 +1801,12 @@ function getModalContent(type, data) {
       <div class="modal-sub">소모 칼로리를 추정해드릴게요</div>
       <div class="form-row">
         <label class="form-label">운동 종류</label>
-        <select id="exercise-type">
+        <select id="exercise-type" onchange="onExerciseTypeChange()">
+          <option value="슬로우러닝,7,running">슬로우 러닝 (LSD)</option>
+          <option value="달리기,9,running">달리기 (일반)</option>
+          <option value="빠른 달리기,11,running">빠른 달리기</option>
           <option value="걷기,3.5">걷기 (보통)</option>
           <option value="빠르게 걷기,5">빠르게 걷기</option>
-          <option value="달리기,9">달리기</option>
           <option value="자전거,7">자전거</option>
           <option value="수영,8">수영</option>
           <option value="요가,3">요가</option>
@@ -1758,6 +1818,25 @@ function getModalContent(type, data) {
           <option value="청소,3">집안일/청소</option>
         </select>
       </div>
+      
+      <!-- 러닝 전용 상세 (슬로우러닝 등 선택 시 표시) -->
+      <div id="running-detail" style="background:var(--moss-bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--moss);margin-bottom:8px;font-weight:500;">🏃 러닝 상세 (선택)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label class="form-label">거리 (km)</label>
+            <input type="number" step="0.1" id="run-distance" placeholder="예: 5.0">
+          </div>
+          <div>
+            <label class="form-label">평균 심박수 (선택)</label>
+            <input type="number" id="run-hr" placeholder="예: 135">
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--ink-muted);line-height:1.4;">
+          💡 슬로우 러닝(LSD)은 심박수 최대치의 60-70%에서 지방을 가장 잘 태워요. 대화 가능한 속도가 적당해요.
+        </div>
+      </div>
+      
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div class="form-row">
           <label class="form-label">시간 (분)</label>
@@ -1770,7 +1849,7 @@ function getModalContent(type, data) {
       </div>
       <div class="form-row">
         <label class="form-label">체중 (소모 칼로리 계산용)</label>
-        <input type="number" step="0.1" id="exercise-weight" value="${day.weight || 60}" placeholder="kg">
+        <input type="number" step="0.1" id="exercise-weight" value="${day.weight || profile_startWeight() || 60}" placeholder="kg">
       </div>
       <div class="modal-actions">
         <button class="btn" onclick="closeModal()">취소</button>
@@ -1966,14 +2045,48 @@ function addWater(ml) {
   render();
 }
 
+function profile_startWeight() {
+  return state.settings.profile && state.settings.profile.startWeight ? state.settings.profile.startWeight : null;
+}
+
+function onExerciseTypeChange() {
+  const val = document.getElementById('exercise-type').value;
+  const isRunning = val.includes('running');
+  const detail = document.getElementById('running-detail');
+  if (detail) detail.style.display = isRunning ? 'block' : 'none';
+}
+
 function saveExercise() {
-  const [type, met] = document.getElementById('exercise-type').value.split(',');
+  const parts = document.getElementById('exercise-type').value.split(',');
+  const type = parts[0];
+  const met = parts[1];
+  const isRunning = parts[2] === 'running';
   const duration = parseFloat(document.getElementById('exercise-duration').value) || 0;
   const weight = parseFloat(document.getElementById('exercise-weight').value) || 60;
   const time = document.getElementById('exercise-time')?.value || '';
   const cal = Math.round(parseFloat(met) * weight * (duration / 60));
-  getDay().exercise.push({ name: type, duration, cal, time });
-  // 시간순 정렬
+  
+  const record = { name: type, duration, cal, time };
+  
+  // 러닝 상세 정보
+  if (isRunning) {
+    const distance = parseFloat(document.getElementById('run-distance')?.value) || null;
+    const hr = parseFloat(document.getElementById('run-hr')?.value) || null;
+    if (distance) {
+      record.distance = distance;
+      // 페이스 계산 (분/km)
+      if (duration > 0) {
+        const paceMin = duration / distance;
+        const pm = Math.floor(paceMin);
+        const ps = Math.round((paceMin - pm) * 60);
+        record.pace = `${pm}'${String(ps).padStart(2,'0')}"`;
+      }
+    }
+    if (hr) record.hr = hr;
+    record.isRunning = true;
+  }
+  
+  getDay().exercise.push(record);
   getDay().exercise.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   saveAll();
   closeModal();
@@ -2691,6 +2804,329 @@ ${weightChange !== null ? `30일간 체중 변화: ${weightChange.toFixed(1)}${s
   }
 }
 
+// ============================================================
+// 슈퍼푸드 / 쿠팡 파트너스 추천
+// ============================================================
+
+// 슈퍼푸드 데이터베이스 (유기농/다이어트 인기 품목)
+// link는 본인 파트너스 링크를 설정에서 채우면 자동 연결됨
+const SUPERFOODS = [
+  // 단백질
+  { key: 'chicken_breast', name: '닭가슴살', emoji: '🍗', category: 'protein', tags: ['단백질'], desc: '저지방 고단백의 대표주자. 다이어트 필수템', search: '냉동 닭가슴살' },
+  { key: 'greek_yogurt', name: '그릭요거트', emoji: '🥛', category: 'protein', tags: ['단백질','유산균'], desc: '단백질 풍부 + 장 건강. 무가당 추천', search: '무가당 그릭요거트' },
+  { key: 'protein_powder', name: '단백질 파우더', emoji: '💪', category: 'protein', tags: ['단백질'], desc: '간편하게 단백질 보충. 식물성/유청 선택', search: '식물성 단백질 파우더' },
+  { key: 'tofu', name: '유기농 두부', emoji: '🟫', category: 'protein', tags: ['단백질','식물성'], desc: '식물성 단백질. 포만감 좋고 칼로리 낮음', search: '유기농 두부' },
+  { key: 'eggs', name: '유정란', emoji: '🥚', category: 'protein', tags: ['단백질'], desc: '완전식품. 아침 단백질로 최고', search: '유정란 계란' },
+  // 건강한 탄수화물
+  { key: 'oatmeal', name: '유기농 오트밀', emoji: '🥣', category: 'carb', tags: ['식이섬유','탄수화물'], desc: '저GI 탄수화물. 포만감 오래가는 아침식사', search: '유기농 오트밀 귀리' },
+  { key: 'quinoa', name: '유기농 퀴노아', emoji: '🌾', category: 'carb', tags: ['단백질','식이섬유'], desc: '슈퍼곡물. 단백질까지 풍부한 탄수화물', search: '유기농 퀴노아' },
+  { key: 'sweet_potato', name: '고구마', emoji: '🍠', category: 'carb', tags: ['식이섬유','탄수화물'], desc: '든든한 다이어트 탄수화물. 식이섬유 풍부', search: '꿀고구마' },
+  // 슈퍼푸드
+  { key: 'blueberry', name: '유기농 블루베리', emoji: '🫐', category: 'superfood', tags: ['항산화','비타민'], desc: '항산화 끝판왕. 냉동도 영양 그대로', search: '냉동 유기농 블루베리' },
+  { key: 'avocado', name: '아보카도', emoji: '🥑', category: 'superfood', tags: ['건강지방'], desc: '건강한 지방. 포만감과 영양 모두 챙김', search: '아보카도' },
+  { key: 'chia', name: '유기농 치아씨드', emoji: '⚫', category: 'superfood', tags: ['오메가3','식이섬유'], desc: '물에 불리면 포만감 폭발. 식이섬유 풍부', search: '유기농 치아시드' },
+  { key: 'flaxseed', name: '유기농 아마씨', emoji: '🟤', category: 'superfood', tags: ['오메가3','식이섬유'], desc: '오메가3와 리그난. 갈아서 요거트에', search: '유기농 아마씨 분말' },
+  { key: 'chickpea', name: '병아리콩', emoji: '🟡', category: 'superfood', tags: ['단백질','식이섬유'], desc: '식물성 단백질 + 식이섬유. 샐러드에 최고', search: '병아리콩' },
+  // 견과류
+  { key: 'almond', name: '유기농 아몬드', emoji: '🌰', category: 'nuts', tags: ['건강지방','비타민E'], desc: '건강한 간식. 한 줌이면 충분', search: '유기농 아몬드' },
+  { key: 'walnut', name: '호두', emoji: '🥜', category: 'nuts', tags: ['오메가3'], desc: '오메가3 풍부한 견과류. 두뇌와 심장 건강', search: '생호두' },
+  // 기타
+  { key: 'olive_oil', name: '유기농 올리브오일', emoji: '🫒', category: 'etc', tags: ['건강지방'], desc: '건강한 조리유. 엑스트라버진 추천', search: '유기농 엑스트라버진 올리브오일' },
+  { key: 'psyllium', name: '차전자피', emoji: '🌿', category: 'etc', tags: ['식이섬유'], desc: '식이섬유 보충. 변비와 포만감에 도움', search: '차전자피 분말' },
+  { key: 'kombucha', name: '콤부차', emoji: '🍵', category: 'etc', tags: ['유산균'], desc: '발효 음료. 탄산음료 대체로 좋음', search: '콤부차' },
+];
+
+const CATEGORY_LABELS = {
+  protein: '단백질 식품',
+  carb: '건강한 탄수화물',
+  superfood: '슈퍼푸드',
+  nuts: '견과류',
+  etc: '기타 건강식품'
+};
+
+const COUPANG_DISCLOSURE = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.';
+
+// 오늘의 정밀 영양 분석 (개인 맞춤)
+function renderNutritionAnalysis() {
+  const profile = state.settings.profile;
+  const day = getDay();
+  
+  // 프로필 미완성 시 안내
+  if (!profile.onboarded || !profile.startWeight || !profile.height) {
+    return `
+      <div class="coach-card" style="background:linear-gradient(135deg, var(--accent-bg) 0%, var(--gold-bg) 100%);border:1px solid var(--accent-soft);">
+        <div class="coach-title"><span>📋</span> 맞춤 분석을 위해</div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
+          정확한 칼로리·영양소 분석을 위해 내 정보를 먼저 등록해주세요.
+        </div>
+        <button class="coach-action-btn" onclick="startOnboarding()">
+          <span>✦</span><span>내 정보 등록하기</span>
+        </button>
+      </div>
+    `;
+  }
+  
+  // 오늘 섭취량 집계
+  let cal = 0, c = 0, p = 0, f = 0, exCal = 0;
+  Object.values(day.foods).forEach(meal => meal.forEach(item => {
+    cal += item.cal || 0; c += item.c || 0; p += item.p || 0; f += item.f || 0;
+  }));
+  (day.exercise || []).forEach(e => exCal += e.cal || 0);
+  const netCal = cal - exCal;
+  
+  // 목표 계산
+  const goal = state.settings.goal;
+  const proteinGoal = Math.round(profile.startWeight * 1.6); // g
+  const remainingCal = goal - netCal;
+  // 탄단지 목표 (단백 25%, 탄수 45%, 지방 30%)
+  const carbGoal = Math.round(goal * 0.45 / 4);
+  const fatGoal = Math.round(goal * 0.30 / 9);
+  
+  // 부족/초과 판단
+  const proteinPct = Math.min(100, Math.round(p / proteinGoal * 100));
+  const carbPct = Math.min(100, Math.round(c / carbGoal * 100));
+  const fatPct = Math.min(100, Math.round(f / fatGoal * 100));
+  const calPct = Math.min(100, Math.round(netCal / goal * 100));
+  
+  // 핵심 진단 메시지
+  let diagnosis = [];
+  const proteinShort = proteinGoal - Math.round(p);
+  if (proteinShort > 20) {
+    diagnosis.push({ type: 'warn', icon: '⚠️', text: `단백질이 ${proteinShort}g 부족해요. 근육 유지를 위해 닭가슴살, 두부, 그릭요거트를 드세요.` });
+  } else if (p >= proteinGoal) {
+    diagnosis.push({ type: 'good', icon: '✓', text: `단백질 목표 달성! 근육 유지에 좋아요.` });
+  }
+  if (netCal > goal) {
+    diagnosis.push({ type: 'warn', icon: '🔴', text: `목표보다 ${Math.round(netCal - goal)}kcal 초과했어요. 남은 시간엔 가볍게.` });
+  } else if (remainingCal > 300) {
+    diagnosis.push({ type: 'info', icon: '💡', text: `아직 ${Math.round(remainingCal)}kcal 여유가 있어요. 단백질 위주로 채우세요.` });
+  }
+  if (c > carbGoal * 1.3) {
+    diagnosis.push({ type: 'warn', icon: '🍚', text: `탄수화물이 많아요. 다음 끼니는 채소·단백질 위주로.` });
+  }
+  if (diagnosis.length === 0) {
+    diagnosis.push({ type: 'good', icon: '👍', text: `균형 잘 잡혀 있어요! 이대로 유지하세요.` });
+  }
+  
+  const bar = (pct, color, over) => `
+    <div style="height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;margin-top:4px;">
+      <div style="height:100%;width:${pct}%;background:${over ? 'var(--rose)' : color};transition:width 0.4s;"></div>
+    </div>
+  `;
+  
+  return `
+    <div class="coach-card" style="background:linear-gradient(135deg, var(--accent-bg) 0%, var(--bg-card) 120%);border:1px solid var(--accent-soft);">
+      <div class="coach-title"><span>🎯</span> 오늘의 다이어트 처방</div>
+      <div style="font-size:11px;color:var(--ink-muted);margin-bottom:14px;">${profile.name ? profile.name + '님 ' : ''}맞춤 분석 · ${profile.startWeight}kg → ${profile.targetWeight}kg 목표</div>
+      
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:13px;font-weight:500;">칼로리</span>
+          <span style="font-size:12px;color:${netCal > goal ? 'var(--rose)' : 'var(--ink-soft)'};">${Math.round(netCal)} / ${goal} kcal</span>
+        </div>
+        ${bar(calPct, 'var(--accent)', netCal > goal)}
+      </div>
+      
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:13px;font-weight:500;">단백질 ${proteinShort > 0 ? `<span style="font-size:10px;color:var(--rose);">${proteinShort}g 부족</span>` : '<span style="font-size:10px;color:var(--moss);">충분</span>'}</span>
+          <span style="font-size:12px;color:var(--ink-soft);">${Math.round(p)} / ${proteinGoal} g</span>
+        </div>
+        ${bar(proteinPct, 'var(--moss)', false)}
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="font-size:12px;">탄수화물</span>
+            <span style="font-size:11px;color:var(--ink-soft);">${Math.round(c)}/${carbGoal}g</span>
+          </div>
+          ${bar(carbPct, '#C47A30', c > carbGoal * 1.3)}
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="font-size:12px;">지방</span>
+            <span style="font-size:11px;color:var(--ink-soft);">${Math.round(f)}/${fatGoal}g</span>
+          </div>
+          ${bar(fatPct, '#B85470', f > fatGoal * 1.3)}
+        </div>
+      </div>
+      
+      <div style="border-top:1px solid var(--border);padding-top:12px;">
+        ${diagnosis.map(d => `
+          <div class="insight ${d.type}" style="margin-bottom:6px;">
+            <span>${d.icon}</span><span>${d.text}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// 오늘의 정밀 영양 분석 끝
+
+// 쿠팡 링크 생성 (본인 링크 있으면 그것, 없으면 검색 페이지)
+function getCoupangLink(food) {
+  const userLink = state.settings.coupangLinks[food.key];
+  if (userLink && userLink.trim()) return userLink.trim();
+  return null; // 링크 미설정
+}
+
+function openSuperfood(key) {
+  const food = SUPERFOODS.find(f => f.key === key);
+  if (!food) return;
+  const link = getCoupangLink(food);
+  if (link) {
+    window.open(link, '_blank');
+  } else {
+    // 링크 미설정 시 안내
+    alert(`"${food.name}" 추천 링크가 아직 설정되지 않았어요.\n\n설정 → 쿠팡 파트너스 링크에서 본인 링크를 등록하면 바로 연결됩니다.`);
+  }
+}
+
+function openCoupangSettings() {
+  const modal = document.getElementById('modal');
+  const overlay = document.getElementById('modal-overlay');
+  
+  const cats = ['protein', 'carb', 'superfood', 'nuts', 'etc'];
+  let itemsHtml = '';
+  cats.forEach(cat => {
+    const foods = SUPERFOODS.filter(f => f.category === cat);
+    itemsHtml += `<div style="font-size:12px;font-weight:500;color:var(--ink-soft);margin:14px 0 8px;">${CATEGORY_LABELS[cat]}</div>`;
+    foods.forEach(food => {
+      const cur = state.settings.coupangLinks[food.key] || '';
+      itemsHtml += `
+        <div style="margin-bottom:10px;">
+          <label class="form-label">${food.emoji} ${food.name} <span style="font-size:9px;color:var(--ink-muted);">(검색어: ${food.search})</span></label>
+          <input type="text" data-coupang-key="${food.key}" value="${cur}" placeholder="https://link.coupang.com/a/..." style="font-size:12px;">
+        </div>
+      `;
+    });
+  });
+  
+  modal.innerHTML = `
+    <div class="modal-title">🛒 쿠팡 파트너스 링크</div>
+    <div class="modal-sub">본인이 발급한 파트너스 링크를 넣으면 수익이 본인에게 들어가요</div>
+    
+    <div style="background:var(--accent-bg);padding:12px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:11px;line-height:1.6;color:var(--ink-soft);">
+      <strong style="color:var(--accent);">📌 링크 만드는 법</strong><br>
+      1. <a href="https://partners.coupang.com" target="_blank" style="color:var(--accent);">partners.coupang.com</a> 로그인<br>
+      2. 각 상품의 검색어로 쿠팡에서 상품 검색<br>
+      3. 파트너스에서 "링크 생성" → 단축 URL 복사<br>
+      4. 아래 해당 칸에 붙여넣기<br>
+      <span style="color:var(--ink-muted);">※ 빈 칸은 자동으로 비활성화돼요</span>
+    </div>
+    
+    <div style="max-height:50vh;overflow-y:auto;">
+      ${itemsHtml}
+    </div>
+    
+    <div class="modal-actions">
+      <button class="btn" onclick="openModal('settings')">뒤로</button>
+      <button class="btn btn-primary" onclick="saveCoupangLinks()">저장</button>
+    </div>
+  `;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function saveCoupangLinks() {
+  document.querySelectorAll('[data-coupang-key]').forEach(input => {
+    const key = input.dataset.coupangKey;
+    const val = input.value.trim();
+    if (val) {
+      state.settings.coupangLinks[key] = val;
+    } else {
+      delete state.settings.coupangLinks[key];
+    }
+  });
+  saveAll();
+  closeModal();
+  alert('쿠팡 파트너스 링크가 저장됐어요!');
+}
+
+// 부족 영양소 기반 추천 카테고리 결정
+function getRecommendedCategories() {
+  const day = getDay();
+  let p = 0, c = 0, f = 0, cal = 0;
+  Object.values(day.foods).forEach(meal => meal.forEach(item => {
+    p += item.p || 0; c += item.c || 0; f += item.f || 0; cal += item.cal || 0;
+  }));
+  
+  const profile = state.settings.profile;
+  const proteinGoal = profile.startWeight ? profile.startWeight * 1.6 : 80;
+  
+  const cats = [];
+  // 단백질 부족하면 단백질 우선
+  if (p < proteinGoal * 0.7) cats.push('protein');
+  // 항상 슈퍼푸드는 추천
+  cats.push('superfood');
+  // 탄수화물 적으면
+  if (c < 100) cats.push('carb');
+  cats.push('nuts');
+  cats.push('etc');
+  return [...new Set(cats)];
+}
+
+function renderSuperfoodSection() {
+  const cats = getRecommendedCategories();
+  const day = getDay();
+  let p = 0;
+  Object.values(day.foods).forEach(meal => meal.forEach(item => p += item.p || 0));
+  const profile = state.settings.profile;
+  const proteinGoal = profile.startWeight ? Math.round(profile.startWeight * 1.6) : 80;
+  const proteinShort = proteinGoal - Math.round(p);
+  
+  let contextMsg = '';
+  if (proteinShort > 20) {
+    contextMsg = `오늘 단백질이 ${proteinShort}g 부족해요. 단백질 식품을 우선 추천드려요.`;
+  } else {
+    contextMsg = '건강한 다이어트를 위한 유기농 슈퍼푸드를 추천드려요.';
+  }
+  
+  let html = `
+    <div class="coach-card">
+      <div class="coach-title"><span style="color:var(--accent);">🛒</span> 맞춤 슈퍼푸드 추천</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;">${contextMsg}</div>
+  `;
+  
+  // 카테고리별로 상품 표시
+  cats.forEach(cat => {
+    const foods = SUPERFOODS.filter(f => f.category === cat);
+    if (foods.length === 0) return;
+    
+    html += `<div style="font-size:12px;font-weight:500;color:var(--ink-soft);margin:14px 0 8px;letter-spacing:0.03em;">${CATEGORY_LABELS[cat]}</div>`;
+    html += '<div class="superfood-grid">';
+    
+    foods.forEach(food => {
+      const hasLink = !!getCoupangLink(food);
+      html += `
+        <div class="superfood-card" onclick="openSuperfood('${food.key}')">
+          <div class="sf-emoji">${food.emoji}</div>
+          <div class="sf-info">
+            <div class="sf-name">${food.name}</div>
+            <div class="sf-desc">${food.desc}</div>
+            <div class="sf-tags">${food.tags.map(t => `<span class="sf-tag">${t}</span>`).join('')}</div>
+          </div>
+          <div class="sf-arrow">${hasLink ? '🛒' : '🔗'}</div>
+        </div>
+      `;
+    });
+    
+    html += '</div>';
+  });
+  
+  // 쿠팡 파트너스 필수 고지
+  html += `
+      <div class="coupang-disclosure">
+        📢 ${COUPANG_DISCLOSURE}
+      </div>
+    </div>
+  `;
+  
+  return html;
+}
+
 function renderCoach() {
   const day = getDay();
   const weekData = gatherContext(7);
@@ -2698,6 +3134,8 @@ function renderCoach() {
   
   const content = document.getElementById('coach-content');
   content.innerHTML = `
+    ${renderNutritionAnalysis()}
+
     <div class="coach-card featured">
       <div class="coach-title"><span>✦</span> AI 음식 추천</div>
       <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;line-height:1.5;">
@@ -2748,6 +3186,8 @@ function renderCoach() {
         • 몸상태 자주 기록할수록 AI가 정확해져요
       </div>
     </div>
+
+    ${renderSuperfoodSection()}
   `;
 }
 
