@@ -529,6 +529,67 @@
   }
   .coach-quick-q:hover { border-color: var(--accent); color: var(--accent); }
 
+  /* 사진 수집 카드 */
+  .photo-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .photo-thumbs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .photo-thumb {
+    position: relative;
+    width: 72px; height: 72px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .photo-thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    cursor: pointer;
+  }
+  .photo-thumb-label {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    font-size: 9px;
+    text-align: center;
+    padding: 2px;
+  }
+  .photo-thumb-del {
+    position: absolute;
+    top: 2px; right: 2px;
+    width: 18px; height: 18px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border-radius: 50%;
+    font-size: 12px;
+    line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .photo-add-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .photo-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
   /* 라디오 옵션 (온보딩용) */
   .radio-option {
     padding: 12px 14px;
@@ -1099,6 +1160,9 @@
     <input type="date" id="hidden-date" style="position: absolute; opacity: 0; pointer-events: none;">
   </div>
 
+  <!-- 영상 제작일 알림 -->
+  <div id="home-youtube-reminder"></div>
+
   <!-- 생리주기 알림 -->
   <div class="cycle-indicator" id="cycle-indicator" style="display:none;">
     <span>◐</span>
@@ -1228,6 +1292,19 @@
   <!-- 오늘 기록된 몸상태 -->
   <div id="conditions-list"></div>
 
+  <!-- 오늘의 사진 (유튜브용) -->
+  <div class="photo-card" id="photo-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span style="font-size:14px;font-weight:500;">📸 오늘의 사진</span>
+      <span style="font-size:11px;color:var(--ink-muted);">유튜브 영상용</span>
+    </div>
+    <div id="photo-thumbs" class="photo-thumbs"></div>
+    <button class="photo-add-btn" onclick="document.getElementById('photo-file-input').click()">
+      <span style="font-size:18px;">+</span> 음식·운동 사진 추가
+    </button>
+    <input type="file" id="photo-file-input" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoUpload(event)">
+  </div>
+
   <!-- 식사 리스트 -->
   <div id="meal-list"></div>
   <div class="empty" id="empty-state" style="display:none;">
@@ -1329,7 +1406,12 @@ let state = {
       olive_oil: 'https://link.coupang.com/a/dY0CwHIIrA',
       psyllium: 'https://link.coupang.com/a/dY0E57pafY',
       kombucha: 'https://link.coupang.com/a/dY0G9AA4ia'
-    } // { 상품키: '본인파트너스링크' }
+    }, // { 상품키: '본인파트너스링크' }
+    googleSheet: {
+      url: '',          // Apps Script 웹앱 URL
+      userName: '',     // 시트에 기록될 사용자 이름 (예: 지은)
+      autoSync: true    // 기록 시 자동 전송
+    }
   }
 };
 
@@ -1358,10 +1440,20 @@ function formatDate(dateStr) {
 // ============================================================
 const STORAGE_KEY = 'wife_diet_v1';
 
+let sheetSyncTimer = null;
 function saveAll() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) { console.error(e); }
+  
+  // 구글시트 자동 전송 (디바운스: 마지막 변경 5초 후 1회)
+  const gs = state.settings && state.settings.googleSheet;
+  if (gs && gs.url && gs.autoSync !== false) {
+    clearTimeout(sheetSyncTimer);
+    sheetSyncTimer = setTimeout(() => {
+      syncToGoogleSheet(state.currentDate, true);
+    }, 5000);
+  }
 }
 
 function loadAll() {
@@ -1375,6 +1467,7 @@ function loadAll() {
       if (!state.settings) state.settings = { goal: 1500, waterGoal: 2000, weightUnit: 'kg', apiKey: '', openaiKey: '', cycle: { lastPeriod: null, length: 28, duration: 5 } };
       if (state.settings.openaiKey === undefined) state.settings.openaiKey = '';
       if (!state.settings.coupangLinks) state.settings.coupangLinks = {};
+      if (!state.settings.googleSheet) state.settings.googleSheet = { url: '', userName: '', autoSync: true };
       // 저장 데이터에 없는 링크는 기본값으로 채움
       Object.keys(DEFAULT_COUPANG_LINKS).forEach(k => {
         if (!state.settings.coupangLinks[k]) state.settings.coupangLinks[k] = DEFAULT_COUPANG_LINKS[k];
@@ -1405,12 +1498,14 @@ function getDay(date = state.currentDate) {
       exercise: [],
       sleep: null,
       conditions: [],
-      chat: []
+      chat: [],
+      photos: []
     };
   }
   // 이전 버전 호환
   if (!state.daily[date].conditions) state.daily[date].conditions = [];
   if (!state.daily[date].chat) state.daily[date].chat = [];
+  if (!state.daily[date].photos) state.daily[date].photos = [];
   return state.daily[date];
 }
 
@@ -1496,8 +1591,146 @@ function render() {
   // 몸상태 요약 표시
   renderConditionsSummary();
 
+  // 사진 표시
+  renderPhotos();
+
+  // 영상 제작일 알림 (홈)
+  renderHomeYoutubeReminder();
+
   // 식사 리스트
   renderMeals();
+}
+
+function renderHomeYoutubeReminder() {
+  const el = document.getElementById('home-youtube-reminder');
+  if (!el) return;
+  const today = new Date(state.currentDate);
+  const dow = today.getDay();
+  const day = getDay();
+  // 수/일요일 + 아직 대본 안 만들었을 때만
+  if ((dow === 0 || dow === 3) && !day.videoScriptMade) {
+    const photoCount = countWeekPhotos();
+    const dayName = dow === 0 ? '일요일' : '수요일';
+    el.innerHTML = `
+      <div onclick="switchPage('coach')" style="background:linear-gradient(135deg,var(--accent-bg),var(--gold-bg));padding:12px 14px;border-radius:var(--radius);margin-bottom:12px;border:1px solid var(--accent-soft);cursor:pointer;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">🎬</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;color:var(--accent);">${dayName}, 영상 만드는 날이에요!</div>
+          <div style="font-size:11px;color:var(--ink-soft);">이번 주 사진 ${photoCount}장 · 탭하면 대본 만들기로 →</div>
+        </div>
+      </div>
+    `;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+// ============================================================
+// 사진 수집 (유튜브용)
+// ============================================================
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      // 압축: 최대 800px, JPEG 0.7 품질 (localStorage 절약)
+      const maxDim = 800;
+      let w = img.width, h = img.height;
+      if (w > h && w > maxDim) { h = h * maxDim / w; w = maxDim; }
+      else if (h > maxDim) { w = w * maxDim / h; h = maxDim; }
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.7);
+      
+      // 사진 종류 물어보기
+      const type = prompt('사진 종류를 입력하세요 (예: 음식, 운동, 체중계)', '음식');
+      
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      
+      const day = getDay();
+      day.photos.push({
+        img: compressed,
+        type: type || '기타',
+        time: timeStr,
+        memo: ''
+      });
+      
+      try {
+        saveAll();
+        renderPhotos();
+      } catch (err) {
+        // localStorage 초과 시
+        day.photos.pop();
+        alert('저장 공간이 부족해요. 오래된 사진을 정리하거나, 영상 만든 후 사진을 삭제해주세요.');
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = ''; // 같은 파일 재선택 가능하게
+}
+
+function renderPhotos() {
+  const container = document.getElementById('photo-thumbs');
+  if (!container) return;
+  const day = getDay();
+  if (!day.photos || day.photos.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = day.photos.map((photo, idx) => `
+    <div class="photo-thumb">
+      <img src="${photo.img}" alt="${photo.type}" onclick="viewPhoto(${idx})">
+      <div class="photo-thumb-label">${photo.type}</div>
+      <button class="photo-thumb-del" onclick="deletePhoto(${idx})">×</button>
+    </div>
+  `).join('');
+}
+
+function viewPhoto(idx) {
+  const day = getDay();
+  const photo = day.photos[idx];
+  if (!photo) return;
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-title">${photo.type} · ${photo.time}</div>
+    <img src="${photo.img}" style="width:100%;border-radius:var(--radius);margin-bottom:12px;">
+    <div class="form-row">
+      <label class="form-label">메모 (영상 만들 때 참고용)</label>
+      <input type="text" id="photo-memo" value="${photo.memo || ''}" placeholder="예: 점심 닭가슴살 샐러드">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="deletePhoto(${idx});closeModal();" style="color:var(--rose);">삭제</button>
+      <button class="btn btn-primary" onclick="savePhotoMemo(${idx})">저장</button>
+    </div>
+  `;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function savePhotoMemo(idx) {
+  const day = getDay();
+  const memo = document.getElementById('photo-memo').value.trim();
+  if (day.photos[idx]) day.photos[idx].memo = memo;
+  saveAll();
+  closeModal();
+  renderPhotos();
+}
+
+function deletePhoto(idx) {
+  const day = getDay();
+  if (!confirm('이 사진을 삭제할까요?')) return;
+  day.photos.splice(idx, 1);
+  saveAll();
+  renderPhotos();
 }
 
 function renderConditionsSummary() {
@@ -1859,6 +2092,7 @@ function getModalContent(type, data) {
       </div>
 
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+        <button class="btn" style="width:100%;margin-bottom:8px;background:var(--accent);color:white;" onclick="openGoogleSheetSettings()">📊 구글시트 연동 (가족 공유)</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="openCoupangSettings()">🛒 쿠팡 파트너스 링크 설정</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeModal();startOnboarding();">내 정보 다시 등록</button>
         <button class="btn" style="width:100%;color:var(--rose);" onclick="if(confirm('정말 모든 데이터를 삭제할까요?')){localStorage.removeItem('${STORAGE_KEY}');location.reload();}">전체 데이터 삭제</button>
@@ -2959,6 +3193,187 @@ ${dataText}
   }
 }
 
+// ============================================================
+// 유튜브 영상 대본 자동 생성
+// ============================================================
+
+// 영상 제작일 알림 배너 (수요일=3, 일요일=0)
+function getYoutubeReminderBanner() {
+  const today = new Date(state.currentDate);
+  const dow = today.getDay(); // 0=일, 3=수
+  const isVideoDay = (dow === 0 || dow === 3);
+  if (!isVideoDay) return '';
+  
+  // 오늘 이미 대본 만들었으면 알림 안 띄움
+  const day = getDay();
+  if (day.videoScriptMade) {
+    return `<div style="background:var(--moss-bg);color:var(--moss);padding:10px 12px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;">✓ 오늘 영상 대본을 만들었어요! 편집해서 올려보세요.</div>`;
+  }
+  
+  // 사진/데이터 개수 체크
+  const photoCount = countWeekPhotos();
+  const dayName = dow === 0 ? '일요일' : '수요일';
+  return `<div style="background:linear-gradient(135deg,var(--accent-bg),var(--gold-bg));padding:12px;border-radius:var(--radius-sm);margin-bottom:12px;border:1px solid var(--accent-soft);">
+    <div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:4px;">🔔 오늘은 ${dayName}, 영상 만드는 날이에요!</div>
+    <div style="font-size:11px;color:var(--ink-soft);">이번 주에 사진 ${photoCount}장을 모았어요. 아래 버튼으로 대본을 만들어보세요.</div>
+  </div>`;
+}
+
+function countWeekPhotos() {
+  let count = 0;
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(state.currentDate);
+    d.setDate(d.getDate() - i);
+    const ds = d.toISOString().split('T')[0];
+    const dayData = state.daily[ds];
+    if (dayData && dayData.photos) count += dayData.photos.length;
+  }
+  return count;
+}
+
+async function generateVideoScript(type) {
+  if (!state.settings.apiKey) { openModal('apiKey'); return; }
+  
+  const btn = event?.target?.closest('button');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span>⏳</span><span>대본 작성 중...</span>'; }
+  
+  try {
+    // 최근 7일 데이터 + 사진 수집
+    const weekData = gatherContext(7);
+    const recorded = weekData.filter(d => d.cal > 0 || d.weight || (d.photos && d.photos.length));
+    const profile = state.settings.profile;
+    const goalTypeLabel = { loss: '감량', maintain: '유지', gain: '근육 증량' }[profile.goalType || 'loss'];
+    
+    // 사진 정보 수집 (이미지 자체가 아닌 메타데이터만)
+    let photoList = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(state.currentDate);
+      d.setDate(d.getDate() - i);
+      const ds = d.toISOString().split('T')[0];
+      const dayData = state.daily[ds];
+      if (dayData && dayData.photos) {
+        dayData.photos.forEach(p => {
+          photoList.push(`${ds} ${p.time} [${p.type}]${p.memo ? ' '+p.memo : ''}`);
+        });
+      }
+    }
+    
+    // 데이터 요약
+    const avgCal = Math.round(recorded.reduce((s,d)=>s+d.cal,0)/(recorded.length||1));
+    const avgP = Math.round(recorded.reduce((s,d)=>s+d.p,0)/(recorded.length||1));
+    const proteinGoal = getProteinGoal(profile);
+    const weights = recorded.filter(d=>d.weight).map(d=>d.weight);
+    const weightChange = weights.length >= 2 ? (weights[weights.length-1] - weights[0]).toFixed(1) : null;
+    
+    let dataText = `[목표] ${goalTypeLabel}\n`;
+    dataText += `[기간] 최근 ${recorded.length}일\n`;
+    dataText += `[평균 섭취] ${avgCal}kcal, 단백질 ${avgP}/${proteinGoal}g\n`;
+    if (weightChange) dataText += `[체중 변화] ${weights[0]}kg → ${weights[weights.length-1]}kg (${weightChange}kg)\n`;
+    dataText += `\n[촬영한 사진 목록]\n${photoList.length ? photoList.join('\n') : '사진 없음 (사진 자리는 비워두고 표시)'}\n`;
+    
+    // 최근 AI 진단/대화에서 인사이트 가져오기
+    const today = getDay();
+    if (today.autoDiagnosis) dataText += `\n[AI 진단 요약]\n${today.autoDiagnosis.text.slice(0, 300)}\n`;
+    
+    let prompt;
+    if (type === 'shorts') {
+      prompt = `당신은 유튜브 쇼츠 대본 작가입니다. 다이어트 앱 사용자의 실제 데이터로 30초~1분 쇼츠 대본을 만들어주세요.
+
+캐릭터: "다린" (20대 후반 친근한 여성, 다정한 존댓말, "~해요", "같이 해봐요" 말투)
+
+${dataText}
+
+다음 형식으로 쇼츠 대본을 작성하세요:
+
+🎬 제목: (호기심 끄는 짧은 제목)
+
+[장면별 구성] (각 장면 = 촬영할 사진/화면 + 다린의 멘트)
+장면1 (0~5초): [화면: 무엇을 보여줄지] / 멘트: "..."
+장면2 (5~15초): [화면: ...] / 멘트: "..."
+... (총 30초~1분 분량, 4~6장면)
+
+📝 자막용 텍스트: (화면에 띄울 짧은 자막들)
+🏷️ 해시태그: (5개)
+
+실제 데이터 숫자를 활용하고, 촬영한 사진 목록을 장면에 매칭하세요. 사진이 없으면 "[여기 음식 사진]"처럼 자리만 표시하세요.`;
+    } else {
+      prompt = `당신은 유튜브 영상 대본 작가입니다. 다이어트 앱 사용자의 실제 데이터로 3~5분 영상 대본을 만들어주세요.
+
+캐릭터: "다린" (20대 후반 친근한 여성, 다정한 존댓말, 솔직하고 공감되는 톤)
+
+${dataText}
+
+다음 형식으로 영상 대본을 작성하세요:
+
+🎬 제목 후보 3개:
+
+[인트로] (0:00~0:20) - 화면 + 멘트
+[본론1: 이번 주 식단 돌아보기] - 사진 매칭 + 데이터 + 멘트
+[본론2: AI가 짚어준 포인트] - 앱 화면 + 멘트
+[본론3: 운동/변화] - 사진 매칭 + 멘트
+[마무리] - 다음 예고 + 구독 유도
+
+각 구간마다 [화면: 보여줄 사진/화면]과 멘트를 구분해서 쓰세요.
+실제 데이터 숫자를 활용하고, 촬영한 사진 목록을 장면에 매칭하세요.
+마지막에 "📌 쿠팡 고지 문구"와 "🏷️ 해시태그"도 넣으세요.`;
+    }
+
+    const script = await callClaude(prompt, 3000);
+    
+    // 결과를 모달로 표시
+    // 오늘 대본 만들었음 표시 (알림 배너용)
+    const todayDay = getDay();
+    todayDay.videoScriptMade = true;
+    await saveAll();
+
+    showVideoScriptModal(script, type, photoList.length);
+    
+  } catch (err) {
+    console.error(err);
+    alert('대본 생성 중 오류: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = type === 'shorts' ? '<span>📱</span><span>쇼츠 대본</span>' : '<span>🎬</span><span>긴 영상 대본</span>';
+    }
+  }
+}
+
+function showVideoScriptModal(script, type, photoCount) {
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  const typeLabel = type === 'shorts' ? '쇼츠 (30초~1분)' : '긴 영상 (3~5분)';
+  
+  modal.innerHTML = `
+    <div class="modal-title">🎬 ${typeLabel} 대본</div>
+    <div style="font-size:11px;color:var(--ink-muted);margin-bottom:12px;">
+      사진 ${photoCount}장 + 최근 데이터 기반 · 복사해서 편집앱에 쓰세요
+    </div>
+    <div style="background:var(--bg-secondary);padding:14px;border-radius:var(--radius-sm);font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:55vh;overflow-y:auto;margin-bottom:14px;">${script.replace(/</g,'&lt;')}</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">닫기</button>
+      <button class="btn btn-primary" onclick="copyVideoScript(this)" data-script="${encodeURIComponent(script)}">📋 대본 복사</button>
+    </div>
+  `;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function copyVideoScript(btn) {
+  const script = decodeURIComponent(btn.dataset.script);
+  navigator.clipboard.writeText(script).then(() => {
+    btn.textContent = '✓ 복사됨!';
+    setTimeout(() => { btn.textContent = '📋 대본 복사'; }, 2000);
+  }).catch(() => {
+    // 폴백
+    const ta = document.createElement('textarea');
+    ta.value = script; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    btn.textContent = '✓ 복사됨!';
+    setTimeout(() => { btn.textContent = '📋 대본 복사'; }, 2000);
+  });
+}
+
 function renderAutoDiagnosisCard() {
   const card = document.getElementById('auto-diagnosis-card');
   if (!card) return;
@@ -3519,6 +3934,135 @@ function saveCoupangLinks() {
   alert('쿠팡 파트너스 링크가 저장됐어요!');
 }
 
+// ============================================================
+// 구글시트 연동
+// ============================================================
+function openGoogleSheetSettings() {
+  const gs = state.settings.googleSheet || { url: '', userName: '', autoSync: true };
+  const modal = document.getElementById('modal');
+  const overlay = document.getElementById('modal-overlay');
+  
+  modal.innerHTML = `
+    <div class="modal-title">📊 구글시트 연동</div>
+    <div class="modal-sub">기록이 구글시트에 자동 저장돼 가족이 함께 볼 수 있어요</div>
+    
+    <div style="background:var(--accent-bg);padding:12px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:11px;line-height:1.6;color:var(--ink-soft);">
+      <strong style="color:var(--accent);">📌 처음 한 번만 설정하면 돼요</strong><br>
+      설정 방법은 함께 드린 "구글시트 연동 가이드" 문서를 보세요.<br>
+      가이드대로 하면 아래에 넣을 <strong>웹앱 URL</strong>이 나와요.
+    </div>
+    
+    <div class="form-row">
+      <label class="form-label">사용자 이름 (시트에 표시될 이름)</label>
+      <input type="text" id="gs-username" value="${gs.userName || ''}" placeholder="예: 지은">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Apps Script 웹앱 URL</label>
+      <input type="text" id="gs-url" value="${gs.url || ''}" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px;">
+    </div>
+    <div class="form-row">
+      <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="gs-autosync" ${gs.autoSync !== false ? 'checked' : ''} style="width:auto;">
+        기록할 때마다 자동으로 시트에 전송
+      </label>
+    </div>
+    
+    <div class="modal-actions" style="flex-direction:column;gap:8px;">
+      <button class="btn btn-primary" style="width:100%;" onclick="saveGoogleSheetSettings()">저장</button>
+      <button class="btn" style="width:100%;" onclick="testGoogleSheet()">📤 지금 오늘 기록 전송 (테스트)</button>
+      <button class="btn" style="width:100%;" onclick="openModal('settings')">뒤로</button>
+    </div>
+    <div id="gs-status" style="margin-top:10px;font-size:12px;text-align:center;"></div>
+  `;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function saveGoogleSheetSettings() {
+  const url = document.getElementById('gs-url').value.trim();
+  const userName = document.getElementById('gs-username').value.trim();
+  const autoSync = document.getElementById('gs-autosync').checked;
+  state.settings.googleSheet = { url, userName, autoSync };
+  saveAll();
+  const status = document.getElementById('gs-status');
+  if (status) { status.style.color = 'var(--moss)'; status.textContent = '✓ 저장됐어요!'; }
+  setTimeout(() => closeModal(), 800);
+}
+
+// 구글시트로 하루 데이터 전송
+async function syncToGoogleSheet(dateStr = state.currentDate, silent = true) {
+  const gs = state.settings.googleSheet;
+  if (!gs || !gs.url) return { ok: false, reason: 'URL 미설정' };
+  
+  const day = state.daily[dateStr];
+  if (!day) return { ok: false, reason: '데이터 없음' };
+  
+  // 영양소 집계
+  let cal = 0, c = 0, p = 0, f = 0, exCal = 0;
+  const foodNames = [];
+  Object.entries(day.foods || {}).forEach(([meal, items]) => {
+    items.forEach(item => {
+      cal += item.cal || 0; c += item.c || 0; p += item.p || 0; f += item.f || 0;
+      foodNames.push(`${meal}:${item.name}`);
+    });
+  });
+  (day.exercise || []).forEach(e => exCal += e.cal || 0);
+  
+  const payload = {
+    user: gs.userName || '사용자',
+    date: dateStr,
+    calories: Math.round(cal),
+    carbs: Math.round(c),
+    protein: Math.round(p),
+    fat: Math.round(f),
+    exerciseCal: Math.round(exCal),
+    netCal: Math.round(cal - exCal),
+    weight: day.weight || '',
+    water: day.water || 0,
+    sleep: day.sleep ? day.sleep.hours : '',
+    foods: foodNames.join(', '),
+    conditions: (day.conditions || []).map(x => (x.tags||[]).join('/')).join(' '),
+    goalType: (state.settings.profile.goalType || 'loss')
+  };
+  
+  try {
+    // Apps Script는 CORS 때문에 no-cors 모드로 전송 (응답 못 읽지만 전송은 됨)
+    await fetch(gs.url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('구글시트 전송 실패:', err);
+    return { ok: false, reason: err.message };
+  }
+}
+
+async function testGoogleSheet() {
+  const url = document.getElementById('gs-url').value.trim();
+  const userName = document.getElementById('gs-username').value.trim();
+  if (!url) { alert('먼저 웹앱 URL을 입력해주세요'); return; }
+  // 임시 저장 후 전송
+  state.settings.googleSheet = { url, userName, autoSync: document.getElementById('gs-autosync').checked };
+  saveAll();
+  
+  const status = document.getElementById('gs-status');
+  if (status) { status.style.color = 'var(--ink-soft)'; status.textContent = '전송 중...'; }
+  
+  const result = await syncToGoogleSheet(state.currentDate, false);
+  if (status) {
+    if (result.ok) {
+      status.style.color = 'var(--moss)';
+      status.innerHTML = '✓ 전송했어요! 구글시트를 확인해보세요.<br><span style="font-size:10px;color:var(--ink-muted);">(시트에 오늘 기록이 추가됐는지 확인)</span>';
+    } else {
+      status.style.color = 'var(--rose)';
+      status.textContent = '전송 실패: ' + (result.reason || '알 수 없음');
+    }
+  }
+}
+
 // 부족 영양소 기반 추천 카테고리 결정
 function getRecommendedCategories() {
   const day = getDay();
@@ -3614,6 +4158,18 @@ function renderCoach() {
     ${renderNutritionAnalysis()}
 
     <div class="coach-card featured" id="auto-diagnosis-card"></div>
+
+    <div class="coach-card featured" id="youtube-card">
+      <div class="coach-title"><span>🎬</span> 유튜브 영상 만들기</div>
+      ${getYoutubeReminderBanner()}
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">
+        그동안 모은 데이터와 사진으로 영상 대본을 자동으로 만들어드려요. 사진과 대본을 편집앱에 넣기만 하면 돼요.
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="coach-action-btn" style="flex:1;" onclick="generateVideoScript('shorts')"><span>📱</span><span>쇼츠 대본</span></button>
+        <button class="coach-action-btn" style="flex:1;" onclick="generateVideoScript('long')"><span>🎬</span><span>긴 영상 대본</span></button>
+      </div>
+    </div>
 
     <div class="coach-card featured" style="padding-bottom:14px;">
       <div class="coach-title"><span>💬</span> AI 코치와 대화</div>
