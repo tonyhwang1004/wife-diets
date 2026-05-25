@@ -1332,6 +1332,11 @@
   <div id="coach-content"></div>
 </div>
 
+<div class="page" id="page-family">
+  <h2 style="font-size: 22px; margin: 16px 4px;">👨‍👩‍👧 가족 기록</h2>
+  <div id="family-content"></div>
+</div>
+
 <!-- 하단 탭 -->
 <div class="bottom-tabs">
   <button class="tab active" data-page="home" onclick="switchPage('home')">
@@ -2004,10 +2009,12 @@ function switchPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  document.querySelector(`.tab[data-page="${page}"]`).classList.add('active');
+  const tabBtn = document.querySelector(`.tab[data-page="${page}"]`);
+  if (tabBtn) tabBtn.classList.add('active');
   if (page === 'stats') renderStats();
   if (page === 'weight') renderWeightPage();
   if (page === 'coach') renderCoach();
+  if (page === 'family') renderFamilyView();
   window.scrollTo(0, 0);
 }
 
@@ -2093,6 +2100,7 @@ function getModalContent(type, data) {
 
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
         <button class="btn" style="width:100%;margin-bottom:8px;background:var(--accent);color:white;" onclick="openGoogleSheetSettings()">📊 구글시트 연동 (가족 공유)</button>
+        <button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeModal();switchPage('family');">👨‍👩‍👧 가족 기록 보기</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="openCoupangSettings()">🛒 쿠팡 파트너스 링크 설정</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeModal();startOnboarding();">내 정보 다시 등록</button>
         <button class="btn" style="width:100%;color:var(--rose);" onclick="if(confirm('정말 모든 데이터를 삭제할까요?')){localStorage.removeItem('${STORAGE_KEY}');location.reload();}">전체 데이터 삭제</button>
@@ -4038,6 +4046,220 @@ async function syncToGoogleSheet(dateStr = state.currentDate, silent = true) {
     console.error('구글시트 전송 실패:', err);
     return { ok: false, reason: err.message };
   }
+}
+
+// 구글시트에서 가족 데이터 불러오기 (doGet 사용)
+async function fetchFamilyData() {
+  const gs = state.settings.googleSheet;
+  if (!gs || !gs.url) return { ok: false, reason: 'URL 미설정' };
+  
+  try {
+    // GET 요청으로 시트 데이터 조회 (Apps Script doGet이 JSON 반환)
+    const response = await fetch(gs.url + '?action=read', {
+      method: 'GET',
+      redirect: 'follow'
+    });
+    const data = await response.json();
+    return { ok: true, rows: data.rows || [] };
+  } catch (err) {
+    console.error('가족 데이터 조회 실패:', err);
+    return { ok: false, reason: err.message };
+  }
+}
+
+// 가족 보기 화면 렌더링
+async function renderFamilyView() {
+  const content = document.getElementById('family-content');
+  if (!content) return;
+  
+  const gs = state.settings.googleSheet;
+  if (!gs || !gs.url) {
+    content.innerHTML = `
+      <div class="coach-card" style="text-align:center;padding:30px 20px;">
+        <div style="font-size:32px;margin-bottom:10px;">📊</div>
+        <div style="font-size:14px;font-weight:500;margin-bottom:8px;">구글시트 연동이 필요해요</div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:16px;line-height:1.5;">
+          가족의 기록을 보려면 먼저 구글시트를 연동하세요.
+        </div>
+        <button class="coach-action-btn" onclick="openGoogleSheetSettings()"><span>📊</span><span>구글시트 연동하기</span></button>
+      </div>
+    `;
+    return;
+  }
+  
+  content.innerHTML = `
+    <div class="coach-card" style="text-align:center;padding:30px 20px;">
+      <div style="font-size:24px;margin-bottom:10px;">🔄</div>
+      <div style="font-size:13px;color:var(--ink-soft);">가족 데이터를 불러오는 중...</div>
+    </div>
+  `;
+  
+  const result = await fetchFamilyData();
+  
+  if (!result.ok) {
+    content.innerHTML = `
+      <div class="coach-card" style="text-align:center;padding:24px;">
+        <div style="font-size:13px;color:var(--rose);margin-bottom:8px;">데이터를 불러오지 못했어요</div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-bottom:14px;">${result.reason}<br>구글시트 연동 가이드의 '읽기 기능 추가'를 확인하세요.</div>
+        <button class="coach-action-btn" onclick="renderFamilyView()"><span>🔄</span><span>다시 시도</span></button>
+      </div>
+    `;
+    return;
+  }
+  
+  const rows = result.rows;
+  if (!rows || rows.length === 0) {
+    content.innerHTML = `<div class="coach-card" style="text-align:center;padding:24px;color:var(--ink-soft);font-size:13px;">아직 데이터가 없어요.<br>가족이 앱에 기록하면 여기 나타나요.</div>`;
+    return;
+  }
+  
+  // 사용자별로 그룹화 (최신 기록 우선)
+  const byUser = {};
+  rows.forEach(r => {
+    const u = r.user || '사용자';
+    if (!byUser[u]) byUser[u] = [];
+    byUser[u].push(r);
+  });
+  
+  let html = '<div style="font-size:11px;color:var(--ink-muted);margin-bottom:12px;text-align:right;">🔄 방금 업데이트됨</div>';
+  
+  Object.entries(byUser).forEach(([user, records]) => {
+    // 최신순 정렬
+    records.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    const latest = records[0];
+    const goalLabel = { loss:'감량', maintain:'유지', gain:'증량' }[latest.goalType] || '';
+    
+    // 최근 7일 평균
+    const recent = records.slice(0, 7);
+    const avgCal = Math.round(recent.reduce((s,r)=>s+(Number(r.netCal)||0),0)/recent.length);
+    const avgP = Math.round(recent.reduce((s,r)=>s+(Number(r.protein)||0),0)/recent.length);
+    const weights = recent.filter(r=>r.weight).map(r=>Number(r.weight));
+    
+    // 그래프용: 오래된 순으로 최근 14일 (날짜 오름차순)
+    const chronological = [...records].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).slice(-14);
+    const weightSeries = chronological.filter(r=>r.weight).map(r=>({date:r.date, val:Number(r.weight)}));
+    const calSeries = chronological.map(r=>({date:r.date, val:Number(r.netCal)||0}));
+    
+    html += `
+      <div class="coach-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span style="font-size:16px;font-weight:600;">${user}</span>
+          <span style="font-size:11px;background:var(--accent-bg);color:var(--accent);padding:3px 10px;border-radius:10px;">${goalLabel}</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink-muted);margin-bottom:10px;">최근 기록: ${latest.date}</div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+          <div style="background:var(--bg-secondary);padding:10px;border-radius:var(--radius-sm);text-align:center;">
+            <div style="font-size:10px;color:var(--ink-muted);">오늘 칼로리</div>
+            <div style="font-size:16px;font-weight:600;">${latest.netCal || 0}</div>
+          </div>
+          <div style="background:var(--bg-secondary);padding:10px;border-radius:var(--radius-sm);text-align:center;">
+            <div style="font-size:10px;color:var(--ink-muted);">단백질</div>
+            <div style="font-size:16px;font-weight:600;">${latest.protein || 0}g</div>
+          </div>
+          <div style="background:var(--bg-secondary);padding:10px;border-radius:var(--radius-sm);text-align:center;">
+            <div style="font-size:10px;color:var(--ink-muted);">체중</div>
+            <div style="font-size:16px;font-weight:600;">${latest.weight || '—'}</div>
+          </div>
+        </div>
+
+        ${weightSeries.length >= 2 ? `
+          <div style="margin-bottom:14px;">
+            <div style="font-size:11px;color:var(--ink-soft);margin-bottom:4px;">📉 체중 추이 (kg)</div>
+            ${miniLineChart(weightSeries, 'var(--accent)')}
+          </div>
+        ` : ''}
+
+        ${calSeries.length >= 2 ? `
+          <div style="margin-bottom:12px;">
+            <div style="font-size:11px;color:var(--ink-soft);margin-bottom:4px;">🍚 일별 칼로리</div>
+            ${miniBarChart(calSeries, state.settings.goal)}
+          </div>
+        ` : ''}
+        
+        <div style="font-size:12px;color:var(--ink-soft);line-height:1.6;border-top:1px solid var(--border);padding-top:10px;">
+          <strong>최근 ${recent.length}일 평균</strong><br>
+          하루 ${avgCal}kcal · 단백질 ${avgP}g${weights.length>=2 ? ` · 체중 ${weights[weights.length-1]}→${weights[0]}kg` : ''}
+        </div>
+        ${latest.foods ? `<div style="font-size:11px;color:var(--ink-muted);margin-top:8px;">🍽 ${latest.foods}</div>` : ''}
+        ${latest.conditions ? `<div style="font-size:11px;color:var(--rose);margin-top:4px;">💭 ${latest.conditions}</div>` : ''}
+      </div>
+    `;
+  });
+  
+  html += `<button class="coach-action-btn" onclick="renderFamilyView()" style="margin-top:4px;"><span>🔄</span><span>새로고침</span></button>`;
+  content.innerHTML = html;
+}
+
+// 미니 선 그래프 (체중용)
+function miniLineChart(series, color) {
+  if (!series || series.length < 2) return '';
+  const w = 300, h = 90, pad = 18;
+  const vals = series.map(s => s.val);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max - min) || 1;
+  const xStep = (w - pad*2) / (series.length - 1);
+  const yScale = v => h - pad - ((v - min) / range) * (h - pad*2);
+  
+  let path = '', points = '';
+  series.forEach((s, i) => {
+    const x = pad + i * xStep;
+    const y = yScale(s.val);
+    path += (path ? 'L' : 'M') + `${x.toFixed(1)},${y.toFixed(1)}`;
+    points += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="${color}"/>`;
+  });
+  
+  return `
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+      <defs>
+        <linearGradient id="fg${Math.random().toString(36).slice(2,7)}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${path}" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      ${points}
+      <text x="${pad}" y="${h-2}" font-size="8" fill="var(--ink-muted)">${series[0].date ? series[0].date.slice(5) : ''}</text>
+      <text x="${w-pad}" y="${h-2}" font-size="8" fill="var(--ink-muted)" text-anchor="end">${series[series.length-1].date ? series[series.length-1].date.slice(5) : ''}</text>
+      <text x="2" y="12" font-size="8" fill="var(--ink-muted)">${max.toFixed(1)}</text>
+      <text x="2" y="${h-pad+3}" font-size="8" fill="var(--ink-muted)">${min.toFixed(1)}</text>
+    </svg>
+  `;
+}
+
+// 미니 막대 그래프 (칼로리용)
+function miniBarChart(series, goal) {
+  if (!series || series.length < 2) return '';
+  const w = 300, h = 80, pad = 18;
+  const vals = series.map(s => s.val);
+  const max = Math.max(...vals, goal || 0) || 1;
+  const barW = (w - pad*2) / series.length * 0.6;
+  const gap = (w - pad*2) / series.length;
+  
+  let bars = '';
+  series.forEach((s, i) => {
+    const x = pad + i * gap + (gap - barW)/2;
+    const barH = (s.val / max) * (h - pad*2);
+    const y = h - pad - barH;
+    const over = goal && s.val > goal;
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0,barH).toFixed(1)}" rx="2" fill="${over ? 'var(--rose)' : 'var(--moss)'}"/>`;
+  });
+  
+  // 목표선
+  let goalLine = '';
+  if (goal) {
+    const gy = h - pad - (goal / max) * (h - pad*2);
+    goalLine = `<line x1="${pad}" y1="${gy.toFixed(1)}" x2="${w-pad}" y2="${gy.toFixed(1)}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/><text x="${w-pad}" y="${(gy-3).toFixed(1)}" font-size="8" fill="var(--accent)" text-anchor="end">목표 ${goal}</text>`;
+  }
+  
+  return `
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+      ${bars}
+      ${goalLine}
+      <text x="${pad}" y="${h-2}" font-size="8" fill="var(--ink-muted)">${series[0].date ? series[0].date.slice(5) : ''}</text>
+      <text x="${w-pad}" y="${h-2}" font-size="8" fill="var(--ink-muted)" text-anchor="end">${series[series.length-1].date ? series[series.length-1].date.slice(5) : ''}</text>
+    </svg>
+  `;
 }
 
 async function testGoogleSheet() {
