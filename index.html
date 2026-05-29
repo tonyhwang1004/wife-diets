@@ -4051,22 +4051,44 @@ async function syncToGoogleSheet(dateStr = state.currentDate, silent = true) {
 // 구글시트에서 가족 데이터 불러오기 (doGet 사용)
 async function fetchFamilyData() {
   const gs = state.settings.googleSheet;
-  if (!gs || !gs.url) return { ok: false, reason: 'URL 미설정' };
-  
+  if (!gs || !gs.url) return { ok: false, reason: 'URL 미설정 - 구글시트 연동을 먼저 하세요' };
+
   try {
-    // GET 요청으로 시트 데이터 조회 (Apps Script doGet이 JSON 반환)
     const response = await fetch(gs.url + '?action=read', {
       method: 'GET',
       redirect: 'follow'
     });
-    const data = await response.json();
+
+    // 먼저 텍스트로 받아서 JSON인지 확인 (HTML 에러페이지 구분용)
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      // JSON이 아니면 doGet 미배포 또는 접근권한 문제
+      const isHtml = text.trim().startsWith('<');
+      return {
+        ok: false,
+        reason: isHtml
+          ? '시트가 데이터 대신 웹페이지를 보냈어요. ① Apps Script에 doGet 함수가 있는지 ② "새 버전"으로 재배포했는지 ③ 접근권한이 "Anyone"인지 확인하세요.'
+          : ('응답을 읽지 못했어요: ' + text.slice(0, 80))
+      };
+    }
+
+    if (data.result === 'error') {
+      return { ok: false, reason: '시트 오류: ' + (data.message || '알 수 없음') };
+    }
+
     return { ok: true, rows: data.rows || [] };
   } catch (err) {
     console.error('가족 데이터 조회 실패:', err);
-    return { ok: false, reason: err.message };
+    // fetch 자체가 막힌 경우(거의 CORS/네트워크)
+    return {
+      ok: false,
+      reason: '시트에 연결하지 못했어요(' + err.message + '). 웹앱 URL이 맞는지, 접근권한이 "Anyone"인지 확인하세요.'
+    };
   }
 }
-
 // 가족 보기 화면 렌더링
 async function renderFamilyView() {
   const content = document.getElementById('family-content');
