@@ -970,6 +970,48 @@
     color: white;
     border-color: var(--accent);
   }
+
+  /* 물 슬라이더 */
+  .water-slider-wrap { padding: 4px 4px 0; }
+  .water-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    outline: none;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .water-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    cursor: grab;
+  }
+  .water-slider::-webkit-slider-thumb:active { cursor: grabbing; }
+  .water-slider::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    cursor: grab;
+  }
+  .water-slider-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 10px;
+    color: var(--ink-muted);
+  }
   .form-row { margin-bottom: 14px; }
   .form-label {
     font-size: 11px;
@@ -1450,6 +1492,19 @@ function formatDate(dateStr) {
 // ============================================================
 const STORAGE_KEY = 'wife_diet_v1';
 
+// 그 날짜에 실제로 의미있는 기록이 있는지 (전부 0/빈 값이면 false)
+function dayHasContent(day) {
+  if (!day) return false;
+  if (day.weight) return true;
+  if (day.water) return true;
+  if (day.sleep && day.sleep.hours) return true;
+  if (Array.isArray(day.exercise) && day.exercise.length > 0) return true;
+  if (Array.isArray(day.conditions) && day.conditions.some(c => (c.tags || []).length > 0)) return true;
+  const foods = day.foods || {};
+  if (Object.values(foods).some(arr => Array.isArray(arr) && arr.length > 0)) return true;
+  return false;
+}
+
 let sheetSyncTimer = null;
 function saveAll() {
   try {
@@ -1457,8 +1512,9 @@ function saveAll() {
   } catch (e) { console.error(e); }
   
   // 구글시트 자동 전송 (디바운스: 마지막 변경 5초 후 1회)
+  // 단, 그 날짜에 실제 기록이 있을 때만 전송 — 빈/0 행이 시트에 쌓이는 것 방지
   const gs = state.settings && state.settings.googleSheet;
-  if (gs && gs.url && gs.autoSync !== false) {
+  if (gs && gs.url && gs.autoSync !== false && dayHasContent(state.daily[state.currentDate])) {
     clearTimeout(sheetSyncTimer);
     sheetSyncTimer = setTimeout(() => {
       syncToGoogleSheet(state.currentDate, true);
@@ -2183,14 +2239,34 @@ function getModalContent(type, data) {
   }
 
   if (type === 'water') {
+    const goal = state.settings.waterGoal || 2000;
+    const sliderMax = Math.max(2000, goal); // 최소 2L까지 보장
+    const cur = day.water || 0;
+    const pct = Math.min(100, Math.round((cur / sliderMax) * 100));
+    const cups = (cur / 250).toFixed(cur % 250 === 0 ? 0 : 1);
     return `
       <div class="modal-title">물 섭취</div>
-      <div class="modal-sub">한 잔 = 약 250ml</div>
-      <div style="text-align:center;margin:20px 0;">
-        <div style="font-family:var(--font-display);font-size:48px;font-weight:300;">${day.water} <span style="font-size:18px;color:var(--ink-soft);">ml</span></div>
-        <div style="color:var(--ink-muted);font-size:12px;">목표 ${state.settings.waterGoal}ml</div>
+      <div class="modal-sub">슬라이더를 좌우로 넘겨 양을 맞춰보세요 · 한 잔 ≈ 250ml</div>
+      <div style="text-align:center;margin:18px 0 6px;">
+        <div style="font-family:var(--font-display);font-size:48px;font-weight:300;line-height:1;">
+          <span id="water-amount">${cur}</span> <span style="font-size:18px;color:var(--ink-soft);">ml</span>
+        </div>
+        <div style="color:var(--ink-muted);font-size:12px;margin-top:4px;">
+          <span id="water-cups">${cups}</span>잔 · 목표 ${goal}ml (<span id="water-pct">${pct}</span>%)
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+
+      <div class="water-slider-wrap">
+        <input type="range" id="water-slider" class="water-slider"
+               min="0" max="${sliderMax}" step="50" value="${cur}"
+               style="background: linear-gradient(to right, var(--accent) 0%, var(--accent) ${pct}%, var(--bg-secondary) ${pct}%, var(--bg-secondary) 100%);"
+               oninput="onWaterSlide(this.value)" onchange="onWaterSlide(this.value)">
+        <div class="water-slider-ticks">
+          <span>0</span><span>0.5L</span><span>1L</span><span>1.5L</span><span>2L${sliderMax>2000?'+':''}</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 4px;">
         <button class="btn-quick" onclick="addWater(250)">+250 ml</button>
         <button class="btn-quick" onclick="addWater(500)">+500 ml</button>
         <button class="btn-quick" onclick="addWater(-250)" style="color:var(--rose);">-250 ml</button>
@@ -2448,8 +2524,33 @@ function addWater(ml) {
   const day = getDay();
   day.water = Math.max(0, (day.water || 0) + ml);
   saveAll();
-  // 모달 다시 그리기
+  // 모달 다시 그리기 (슬라이더 값도 함께 갱신됨)
   document.getElementById('modal').innerHTML = getModalContent('water');
+  render();
+}
+
+// 슬라이더를 드래그/롤하면서 물 양을 직접 설정
+function onWaterSlide(val) {
+  const ml = Math.max(0, parseInt(val, 10) || 0);
+  const day = getDay();
+  day.water = ml;
+  // 드래그 중에는 화면 숫자만 즉시 갱신 (모달 다시 그리지 않아 부드럽게 움직임)
+  const goal = state.settings.waterGoal || 2000;
+  const sliderMax = Math.max(2000, goal);
+  const amountEl = document.getElementById('water-amount');
+  const cupsEl = document.getElementById('water-cups');
+  const pctEl = document.getElementById('water-pct');
+  if (amountEl) amountEl.textContent = ml;
+  if (cupsEl) cupsEl.textContent = (ml / 250).toFixed(ml % 250 === 0 ? 0 : 1);
+  if (pctEl) pctEl.textContent = Math.min(100, Math.round((ml / sliderMax) * 100));
+  // 슬라이더 채움 색 갱신
+  const slider = document.getElementById('water-slider');
+  if (slider) {
+    const p = Math.min(100, (ml / sliderMax) * 100);
+    slider.style.background = `linear-gradient(to right, var(--accent) 0%, var(--accent) ${p}%, var(--bg-secondary) ${p}%, var(--bg-secondary) 100%)`;
+  }
+  saveAll();
+  // 홈 화면의 물 카드도 갱신
   render();
 }
 
@@ -4058,6 +4159,8 @@ async function syncToGoogleSheet(dateStr = state.currentDate, silent = true) {
   
   const day = state.daily[dateStr];
   if (!day) return { ok: false, reason: '데이터 없음' };
+  // 자동 전송(silent)일 때는 빈/0 데이터를 시트에 보내지 않음
+  if (silent && !dayHasContent(day)) return { ok: false, reason: '기록 없음(전송 안 함)' };
   
   // 영양소 집계
   let cal = 0, c = 0, p = 0, f = 0, exCal = 0;
