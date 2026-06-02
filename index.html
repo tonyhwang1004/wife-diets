@@ -4462,7 +4462,7 @@ async function generateYoutubeScript(user) {
   const goalLabel = { loss:'감량', maintain:'유지', gain:'증량' }[latest.goalType] || '건강 관리';
 
   const prompt = `당신은 부부가 함께 운영하는 다이어트 브이로그 유튜브 채널의 대본 작가입니다.
-아래는 오늘 "${user}"님의 실제 다이어트 기록입니다. 이 데이터를 바탕으로, 시청자가 공감하고 응원하고 싶어지는 따뜻하고 진솔한 1~2분짜리 영상 대본을 한국어로 써주세요.
+아래는 "${user}"님의 실제 다이어트 기록입니다. 이 데이터를 바탕으로, 시청자가 공감하고 응원하고 싶어지는 따뜻하고 진솔한 롱폼 영상 대본을 한국어로 써주세요.
 
 [오늘 기록]
 - 날짜: ${latest.date}
@@ -4477,32 +4477,57 @@ async function generateYoutubeScript(user) {
 - 최근 ${recent.length}일 평균 순칼로리: ${avgCal} kcal
 - 체중 변화: ${weightTrend}
 
-[대본 작성 규칙]
+[내용 작성 규칙]
 1. 과장·거짓 없이 실제 기록에 충실할 것. 수치를 지어내지 말 것.
 2. 정체기거나 안 좋은 날이면 억지 긍정 대신 솔직하게, 그러나 따뜻하게.
 3. 부부가 함께하는 채널 톤(서로 응원하는 느낌).
 4. 시청자에게 부담 주는 의학적 조언·극단적 표현 금지.
-5. 다음 형식으로 출력:
-   [제목 후보] 3개
-   [인트로 대사]
-   [본문 대사] (오늘 먹은 것, 느낀 점, 변화)
-   [마무리 대사 + 구독 유도]
-   [해시태그] 5개`;
+5. 대본은 정확히 50문장. 각 문장은 마침표로 끝나는 한 문장이며, 한 문장이 영상의 한 장면이 됩니다.
+6. 구성: 도입부 공감 10문장, 오늘 먹은 것과 과정 10문장, 느낀 점과 변화 10문장, 실천 팁 10문장, 마무리와 구독 유도 10문장.
+
+[출력 형식 — 반드시 이 구분자를 그대로 사용]
+###제목###
+(제목 후보 3개, 줄바꿈으로 구분)
+
+###설명###
+(유튜브 설명란 2~3문장)
+
+###태그###
+(#으로 시작하는 태그 5개)
+
+###대본###
+(50문장. 각 문장 앞에 번호를 붙이지 말고, 한 줄에 한 문장씩.)
+
+###이미지프롬프트###
+(50개. 각 줄은 "번호|그록에 넣을 영어 이미지 프롬프트" 형식.
+1~5번은 수아 님 실제 사진/영상이 들어갈 자리이므로 "[실제사진] 식단/체중계/운동 등 권장 장면"을 한글로 적을 것.
+6~50번은 그록(Grok)에 바로 넣을 영어 이미지 생성 프롬프트를 적을 것.
+예시:
+1|[실제사진] 오늘 아침 식단 사진
+6|a warm cozy korean breakfast table, healthy food, soft morning light, vlog style)`;
 
   try {
-    const script = await callClaude(prompt, 2048);
+    const script = await callClaude(prompt, 4096);
     if (!script) { out.innerHTML = ''; return; }
     const safe = script.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // 대본 부분만 따로 추출 (디노에 바로 붙여넣기용)
+    const scriptOnly = extractDinoSection(script, '대본');
+    const imgOnly = extractDinoSection(script, '이미지프롬프트');
     out.innerHTML = `
-      <div style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;font-size:13px;line-height:1.7;white-space:pre-wrap;">${safe}</div>
+      <div style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:40vh;overflow-y:auto;">${safe}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-        <button class="btn" onclick="copyYoutubeScript('${encodeURIComponent(user)}')">📋 대본 복사</button>
+        <button class="btn" onclick="copyDinoPart('${encodeURIComponent(user)}','script')">📋 대본만 복사 (디노용)</button>
+        <button class="btn" onclick="copyDinoPart('${encodeURIComponent(user)}','img')">🖼 이미지 프롬프트 복사</button>
+        <button class="btn" onclick="copyYoutubeScript('${encodeURIComponent(user)}')">전체 복사</button>
         <button class="btn" onclick="generateYoutubeScript('${user.replace(/'/g,"\\'")}')">🔁 다시 생성</button>
       </div>
       <div style="font-size:10px;color:var(--ink-muted);margin-top:8px;text-align:center;line-height:1.5;">
-        AI가 만든 초안이에요. 올리기 전에 꼭 읽어보고 수정하세요.
+        디노 규칙: 대본 50문장 = 파일 50개(001~050). 1~5번은 수아 님 실제 사진/영상, 6~50번은 그록 이미지.<br>
+        AI 초안이에요. 올리기 전에 꼭 읽어보고 수정하세요.
       </div>
       <textarea id="yt-script-raw-${encodeURIComponent(user)}" style="position:absolute;left:-9999px;">${safe}</textarea>
+      <textarea id="yt-script-part-script-${encodeURIComponent(user)}" style="position:absolute;left:-9999px;">${(scriptOnly||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+      <textarea id="yt-script-part-img-${encodeURIComponent(user)}" style="position:absolute;left:-9999px;">${(imgOnly||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
     `;
   } catch (err) {
     out.innerHTML = `<div style="font-size:12px;color:var(--rose);padding:10px;background:var(--rose-bg);border-radius:var(--radius-sm);">대본 생성 실패: ${err.message}</div>`;
@@ -4518,6 +4543,27 @@ function copyYoutubeScript(encUser) {
   } else {
     ta.style.left = '0'; ta.select(); document.execCommand('copy'); ta.style.left = '-9999px';
     if (typeof toast==='function') toast('대본을 복사했어요');
+  }
+}
+
+// ###섹션### 구분자로 특정 부분만 추출 (디노용 대본/이미지 분리)
+function extractDinoSection(text, name) {
+  if (!text) return '';
+  const re = new RegExp('###\\s*' + name + '\\s*###([\\s\\S]*?)(?:###|$)');
+  const m = text.match(re);
+  return m ? m[1].trim() : '';
+}
+
+function copyDinoPart(encUser, part) {
+  const ta = document.getElementById('yt-script-part-' + part + '-' + encUser);
+  if (!ta) return;
+  const text = ta.value;
+  const msg = part === 'script' ? '대본만 복사했어요 (디노에 붙여넣기)' : '이미지 프롬프트를 복사했어요 (그록에 넣기)';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(()=> { if (typeof toast==='function') toast(msg); });
+  } else {
+    ta.style.left = '0'; ta.select(); document.execCommand('copy'); ta.style.left = '-9999px';
+    if (typeof toast==='function') toast(msg);
   }
 }
 
