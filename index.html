@@ -2122,8 +2122,44 @@ function switchPage(page) {
   if (page === 'weight') renderWeightPage();
   if (page === 'coach') renderCoach();
   if (page === 'family') renderFamilyView();
+  // 가족 보기를 떠나면 자동 새로고침 중지, 들어오면 시작
+  if (page === 'family') startFamilyAutoRefresh();
+  else stopFamilyAutoRefresh();
   window.scrollTo(0, 0);
 }
+
+// ============================================================
+// 가족 기록 실시간(자동) 새로고침
+// 가족 보기 화면에 있는 동안 주기적으로 시트를 다시 읽어,
+// 수아 님이 기록하면 새로고침 없이 자동으로 나타나게 함
+// ============================================================
+let familyRefreshTimer = null;
+const FAMILY_REFRESH_MS = 30000; // 30초마다
+
+function startFamilyAutoRefresh() {
+  stopFamilyAutoRefresh();
+  familyRefreshTimer = setInterval(() => {
+    // 화면이 보이는 상태이고, 여전히 가족 탭일 때만 갱신
+    const familyPage = document.getElementById('page-family');
+    const isVisible = document.visibilityState === 'visible';
+    if (familyPage && familyPage.classList.contains('active') && isVisible) {
+      renderFamilyView({ silent: true });
+    }
+  }, FAMILY_REFRESH_MS);
+}
+
+function stopFamilyAutoRefresh() {
+  if (familyRefreshTimer) { clearInterval(familyRefreshTimer); familyRefreshTimer = null; }
+}
+
+// 앱이 백그라운드에서 돌아오면 즉시 한 번 갱신 (폰 다시 켰을 때 최신화)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  const familyPage = document.getElementById('page-family');
+  if (familyPage && familyPage.classList.contains('active')) {
+    renderFamilyView({ silent: true });
+  }
+});
 
 // ============================================================
 // 모달
@@ -4198,6 +4234,10 @@ async function syncToGoogleSheet(dateStr = state.currentDate, silent = true) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
+    // 마지막 전송 시각 기록 (전송이 실제로 일어났는지 추적용)
+    state.settings.lastSyncAt = new Date().toISOString();
+    state.settings.lastSyncDate = dateStr;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
     return { ok: true };
   } catch (err) {
     console.error('구글시트 전송 실패:', err);
@@ -4247,7 +4287,10 @@ async function fetchFamilyData() {
   }
 }
 // 가족 보기 화면 렌더링
-async function renderFamilyView() {
+// opts.silent === true 이면 자동 새로고침 중이므로 '불러오는 중' 화면을 띄우지 않음
+async function renderFamilyView(opts) {
+  opts = opts || {};
+  const silent = opts.silent === true;
   const content = document.getElementById('family-content');
   if (!content) return;
   
@@ -4266,16 +4309,20 @@ async function renderFamilyView() {
     return;
   }
   
-  content.innerHTML = `
-    <div class="coach-card" style="text-align:center;padding:30px 20px;">
-      <div style="font-size:24px;margin-bottom:10px;">🔄</div>
-      <div style="font-size:13px;color:var(--ink-soft);">가족 데이터를 불러오는 중...</div>
-    </div>
-  `;
+  if (!silent) {
+    content.innerHTML = `
+      <div class="coach-card" style="text-align:center;padding:30px 20px;">
+        <div style="font-size:24px;margin-bottom:10px;">🔄</div>
+        <div style="font-size:13px;color:var(--ink-soft);">가족 데이터를 불러오는 중...</div>
+      </div>
+    `;
+  }
   
   const result = await fetchFamilyData();
   
   if (!result.ok) {
+    // 자동 새로고침 중 일시적 실패는 기존 화면을 유지 (깜빡임 방지)
+    if (silent) return;
     content.innerHTML = `
       <div class="coach-card" style="text-align:center;padding:24px;">
         <div style="font-size:13px;color:var(--rose);margin-bottom:8px;">데이터를 불러오지 못했어요</div>
@@ -4300,7 +4347,11 @@ async function renderFamilyView() {
     byUser[u].push(r);
   });
   
-  let html = '<div style="font-size:11px;color:var(--ink-muted);margin-bottom:12px;text-align:right;">🔄 방금 업데이트됨</div>';
+  const nowT = new Date();
+  const hh = String(nowT.getHours()).padStart(2,'0');
+  const mm = String(nowT.getMinutes()).padStart(2,'0');
+  const ss = String(nowT.getSeconds()).padStart(2,'0');
+  let html = `<div style="font-size:11px;color:var(--ink-muted);margin-bottom:12px;text-align:right;">🟢 실시간 · ${hh}:${mm}:${ss} 업데이트됨 (30초마다 자동)</div>`;
   
   Object.entries(byUser).forEach(([user, records]) => {
     // 최신순 정렬
@@ -4362,12 +4413,112 @@ async function renderFamilyView() {
         </div>
         ${latest.foods ? `<div style="font-size:11px;color:var(--ink-muted);margin-top:8px;">🍽 ${latest.foods}</div>` : ''}
         ${latest.conditions ? `<div style="font-size:11px;color:var(--rose);margin-top:4px;">💭 ${latest.conditions}</div>` : ''}
+
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+          <button class="coach-action-btn" style="width:100%;" onclick="generateYoutubeScript('${user.replace(/'/g,"\\'")}')">
+            <span>🎬</span><span>오늘 유튜브 대본 만들기</span>
+          </button>
+          <div id="yt-script-${encodeURIComponent(user)}" style="margin-top:10px;"></div>
+        </div>
       </div>
     `;
   });
   
+  // 대본 생성에서 쓰도록 사용자별 기록을 보관
+  window.__familyRecords = byUser;
+  
   html += `<button class="coach-action-btn" onclick="renderFamilyView()" style="margin-top:4px;"><span>🔄</span><span>새로고침</span></button>`;
   content.innerHTML = html;
+}
+
+// ============================================================
+// 유튜브 영상 대본(시나리오) 생성
+// 수아 님 기록을 분석해 공감 가는 영상 대사를 만들어 줌.
+// 생성만 자동, 업로드는 사람이 검토 후 직접 (안전)
+// ============================================================
+async function generateYoutubeScript(user) {
+  const out = document.getElementById('yt-script-' + encodeURIComponent(user));
+  if (!out) return;
+
+  if (!state.settings.apiKey) {
+    out.innerHTML = `<div style="font-size:12px;color:var(--rose);padding:10px;background:var(--rose-bg);border-radius:var(--radius-sm);">대본 생성에는 AI 키가 필요해요. 설정 → AI 키에서 등록해주세요.</div>`;
+    return;
+  }
+
+  const byUser = window.__familyRecords || {};
+  const records = (byUser[user] || []).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if (records.length === 0) {
+    out.innerHTML = `<div style="font-size:12px;color:var(--ink-muted);">아직 기록이 없어 대본을 만들 수 없어요.</div>`;
+    return;
+  }
+
+  out.innerHTML = `<div style="font-size:12px;color:var(--ink-soft);padding:10px;text-align:center;">🎬 대본을 쓰는 중...</div>`;
+
+  const latest = records[0];
+  const recent = records.slice(0, 7);
+  const avgCal = Math.round(recent.reduce((s,r)=>s+(Number(r.netCal)||0),0)/recent.length);
+  const weights = recent.filter(r=>r.weight).map(r=>Number(r.weight));
+  const weightTrend = weights.length >= 2 ? `${weights[weights.length-1]}kg → ${weights[0]}kg` : (weights[0] ? `${weights[0]}kg` : '기록 없음');
+  const goalLabel = { loss:'감량', maintain:'유지', gain:'증량' }[latest.goalType] || '건강 관리';
+
+  const prompt = `당신은 부부가 함께 운영하는 다이어트 브이로그 유튜브 채널의 대본 작가입니다.
+아래는 오늘 "${user}"님의 실제 다이어트 기록입니다. 이 데이터를 바탕으로, 시청자가 공감하고 응원하고 싶어지는 따뜻하고 진솔한 1~2분짜리 영상 대본을 한국어로 써주세요.
+
+[오늘 기록]
+- 날짜: ${latest.date}
+- 목표: ${goalLabel}
+- 섭취 칼로리(순): ${latest.netCal || 0} kcal
+- 단백질: ${latest.protein || 0} g
+- 체중: ${latest.weight || '기록 없음'}
+- 먹은 음식: ${latest.foods || '기록 없음'}
+- 몸 상태/감정: ${latest.conditions || '기록 없음'}
+
+[최근 추이]
+- 최근 ${recent.length}일 평균 순칼로리: ${avgCal} kcal
+- 체중 변화: ${weightTrend}
+
+[대본 작성 규칙]
+1. 과장·거짓 없이 실제 기록에 충실할 것. 수치를 지어내지 말 것.
+2. 정체기거나 안 좋은 날이면 억지 긍정 대신 솔직하게, 그러나 따뜻하게.
+3. 부부가 함께하는 채널 톤(서로 응원하는 느낌).
+4. 시청자에게 부담 주는 의학적 조언·극단적 표현 금지.
+5. 다음 형식으로 출력:
+   [제목 후보] 3개
+   [인트로 대사]
+   [본문 대사] (오늘 먹은 것, 느낀 점, 변화)
+   [마무리 대사 + 구독 유도]
+   [해시태그] 5개`;
+
+  try {
+    const script = await callClaude(prompt, 2048);
+    if (!script) { out.innerHTML = ''; return; }
+    const safe = script.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    out.innerHTML = `
+      <div style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;font-size:13px;line-height:1.7;white-space:pre-wrap;">${safe}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <button class="btn" onclick="copyYoutubeScript('${encodeURIComponent(user)}')">📋 대본 복사</button>
+        <button class="btn" onclick="generateYoutubeScript('${user.replace(/'/g,"\\'")}')">🔁 다시 생성</button>
+      </div>
+      <div style="font-size:10px;color:var(--ink-muted);margin-top:8px;text-align:center;line-height:1.5;">
+        AI가 만든 초안이에요. 올리기 전에 꼭 읽어보고 수정하세요.
+      </div>
+      <textarea id="yt-script-raw-${encodeURIComponent(user)}" style="position:absolute;left:-9999px;">${safe}</textarea>
+    `;
+  } catch (err) {
+    out.innerHTML = `<div style="font-size:12px;color:var(--rose);padding:10px;background:var(--rose-bg);border-radius:var(--radius-sm);">대본 생성 실패: ${err.message}</div>`;
+  }
+}
+
+function copyYoutubeScript(encUser) {
+  const ta = document.getElementById('yt-script-raw-' + encUser);
+  if (!ta) return;
+  const text = ta.value;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(()=> { if (typeof toast==='function') toast('대본을 복사했어요'); });
+  } else {
+    ta.style.left = '0'; ta.select(); document.execCommand('copy'); ta.style.left = '-9999px';
+    if (typeof toast==='function') toast('대본을 복사했어요');
+  }
 }
 
 // 미니 선 그래프 (체중용)
