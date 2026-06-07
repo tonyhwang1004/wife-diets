@@ -1825,6 +1825,15 @@ async function confirmPhotoUpload(type) {
       try { saveAll(); } catch(e) {}
       renderPhotos();
       if (typeof toast === 'function') toast(driveUrl ? '✅ 드라이브에 저장됐어요!' : '✅ 사진 업로드 완료!');
+      // 사진 URL을 시트에도 기록 (가족보기에서 볼 수 있도록)
+      if (driveUrl) {
+        fetch(gs.url, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'savePhotoUrl', date: state.currentDate, user: gs.userName || '수아', type, url: driveUrl, time: timeStr })
+        }).catch(()=>{});
+      }
     } catch (err) {
       const idx = day.photos.length - 1;
       if (day.photos[idx]) day.photos[idx].uploading = false;
@@ -4482,6 +4491,23 @@ async function renderFamilyView(opts) {
         </div>
         ${latest.foods ? `<div style="font-size:11px;color:var(--ink-muted);margin-top:8px;">🍽 ${latest.foods}</div>` : ''}
         ${latest.conditions ? `<div style="font-size:11px;color:var(--rose);margin-top:4px;">💭 ${latest.conditions}</div>` : ''}
+
+        ${(() => {
+          // 오늘 날짜 사진만 모아서 표시
+          const todayPhotos = records.filter(r => r.date === latest.date && r.photoUrl);
+          if (todayPhotos.length === 0) return '';
+          return `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+            <div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px;">📸 오늘 사진</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${todayPhotos.map(r => `
+                <div style="position:relative;">
+                  <img src="${r.photoUrl}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="window.open('${r.photoUrl}','_blank')">
+                  <div style="font-size:9px;color:var(--ink-muted);text-align:center;margin-top:2px;">${r.photoType||''}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+        })()}
 
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
           <button class="coach-action-btn" style="width:100%;" onclick="generateYoutubeScript('${user.replace(/'/g,"\\'")}')">
