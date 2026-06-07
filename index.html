@@ -1743,50 +1743,103 @@ function renderHomeYoutubeReminder() {
 function handlePhotoUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-  
+
   const reader = new FileReader();
   reader.onload = (e) => {
     const img = new Image();
     img.onload = () => {
-      // 압축: 최대 800px, JPEG 0.7 품질 (localStorage 절약)
-      const maxDim = 800;
+      const maxDim = 1200;
       let w = img.width, h = img.height;
       if (w > h && w > maxDim) { h = h * maxDim / w; w = maxDim; }
       else if (h > maxDim) { w = w * maxDim / h; h = maxDim; }
-      
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      const compressed = canvas.toDataURL('image/jpeg', 0.7);
-      
-      // 사진 종류 물어보기
-      const type = prompt('사진 종류를 입력하세요 (예: 음식, 운동, 체중계)', '음식');
-      
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      
-      const day = getDay();
-      day.photos.push({
-        img: compressed,
-        type: type || '기타',
-        time: timeStr,
-        memo: ''
-      });
-      
-      try {
-        saveAll();
-        renderPhotos();
-      } catch (err) {
-        // localStorage 초과 시
-        day.photos.pop();
-        alert('저장 공간이 부족해요. 오래된 사진을 정리하거나, 영상 만든 후 사진을 삭제해주세요.');
-      }
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.85);
+
+      window._pendingPhotoBase64 = compressed.split(',')[1];
+      window._pendingPhotoCompressed = compressed;
+
+      // 사진 종류 선택 모달
+      const overlay = document.getElementById('modal-overlay');
+      const modal = document.getElementById('modal');
+      modal.innerHTML = `
+        <div class="modal-title">📸 사진 종류 선택</div>
+        <img src="${compressed}" style="width:100%;max-height:200px;object-fit:cover;border-radius:var(--radius);margin-bottom:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <button class="btn" style="padding:14px;font-size:15px;" onclick="confirmPhotoUpload('음식')">🍱 음식</button>
+          <button class="btn" style="padding:14px;font-size:15px;" onclick="confirmPhotoUpload('운동')">💪 운동</button>
+          <button class="btn" style="padding:14px;font-size:15px;" onclick="confirmPhotoUpload('체중계')">⚖️ 체중계</button>
+          <button class="btn" style="padding:14px;font-size:15px;" onclick="confirmPhotoUpload('기타')">📷 기타</button>
+        </div>
+        <button class="btn" style="width:100%;color:var(--ink-soft);" onclick="closeModal()">취소</button>
+      `;
+      overlay.classList.add('show');
+      document.body.style.overflow = 'hidden';
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
-  event.target.value = ''; // 같은 파일 재선택 가능하게
+  event.target.value = '';
+}
+
+async function confirmPhotoUpload(type) {
+  closeModal();
+  const base64 = window._pendingPhotoBase64;
+  const compressed = window._pendingPhotoCompressed;
+  if (!base64) return;
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const fileName = `수아_${state.currentDate}_${timeStr.replace(':','')}_${type}.jpg`;
+
+  // 로컬 임시 저장
+  const day = getDay();
+  day.photos.push({ img: compressed, type, time: timeStr, memo: '', driveUrl: '', uploading: true });
+  try { saveAll(); } catch(e) {}
+  renderPhotos();
+  if (typeof toast === 'function') toast('📤 드라이브에 업로드 중...');
+
+  // 구글 드라이브 업로드
+  const gs = state.settings && state.settings.googleSheet;
+  if (gs && gs.url) {
+    try {
+      const payload = { action: 'uploadPhoto', fileName, base64, date: state.currentDate, user: gs.userName || '수아', type };
+      let driveUrl = '';
+      try {
+        const res = await fetch(gs.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.result === 'success') driveUrl = result.url || '';
+        }
+      } catch (corsErr) {
+        await fetch(gs.url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+      }
+      const idx = day.photos.length - 1;
+      day.photos[idx].uploading = false;
+      day.photos[idx].driveUrl = driveUrl;
+      try { saveAll(); } catch(e) {}
+      renderPhotos();
+      if (typeof toast === 'function') toast(driveUrl ? '✅ 드라이브에 저장됐어요!' : '✅ 사진 업로드 완료!');
+    } catch (err) {
+      const idx = day.photos.length - 1;
+      if (day.photos[idx]) day.photos[idx].uploading = false;
+      try { saveAll(); } catch(e) {}
+      renderPhotos();
+      if (typeof toast === 'function') toast('⚠️ 드라이브 업로드 실패 - 폰에만 저장됐어요');
+    }
+  } else {
+    day.photos[day.photos.length - 1].uploading = false;
+    try { saveAll(); } catch(e) {}
+    renderPhotos();
+    if (typeof toast === 'function') toast('📸 사진 저장됨 (구글시트 연동하면 드라이브 자동 업로드)');
+  }
+  window._pendingPhotoBase64 = null;
+  window._pendingPhotoCompressed = null;
 }
 
 function renderPhotos() {
@@ -1800,7 +1853,7 @@ function renderPhotos() {
   container.innerHTML = day.photos.map((photo, idx) => `
     <div class="photo-thumb">
       <img src="${photo.img}" alt="${photo.type}" onclick="viewPhoto(${idx})">
-      <div class="photo-thumb-label">${photo.type}</div>
+      <div class="photo-thumb-label">${photo.uploading ? '⏳' : (photo.driveUrl ? '☁️' : '')}${photo.type}</div>
       <button class="photo-thumb-del" onclick="deletePhoto(${idx})">×</button>
     </div>
   `).join('');
