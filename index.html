@@ -3604,20 +3604,99 @@ function showVideoScriptModal(script, type, photoCount) {
   const overlay = document.getElementById('modal-overlay');
   const modal = document.getElementById('modal');
   const typeLabel = type === 'shorts' ? '쇼츠 (30초~1분)' : '긴 영상 (3~5분)';
-  
+
+  // 이번 주 사진 수집 (드라이브 URL 우선, 없으면 로컬)
+  let weekPhotos = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(state.currentDate);
+    d.setDate(d.getDate() - i);
+    const ds = dateToStr(d);
+    const dayData = state.daily[ds];
+    if (dayData && dayData.photos) {
+      dayData.photos.forEach(p => {
+        weekPhotos.push({ src: p.driveUrl || p.img, type: p.type, time: p.time, date: ds });
+      });
+    }
+  }
+
+  // 장면 번호 파싱해서 사진과 매칭
+  const scenes = [];
+  const sceneRegex = /장면(\d+)[^\n]*멘트[^:\uff1a]*[:\uff1a]\s*[\u201c\"]?([^\"\n\u201d]{5,80})/g;
+  let m;
+  while ((m = sceneRegex.exec(script)) !== null) {
+    scenes.push({ num: parseInt(m[1]), ment: m[2] });
+  }
+
+  // 사진 슬라이드 HTML (장면 순서대로)
+  const photoSlideHtml = weekPhotos.length > 0 ? `
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px;">📸 이번 주 사진 ${weekPhotos.length}장 · 장면에 맞게 활용하세요</div>
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;">
+        ${weekPhotos.map((p, i) => `
+          <div style="flex:0 0 auto;text-align:center;">
+            <img src="${p.src}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;border:2px solid ${i < scenes.length ? 'var(--accent)' : 'var(--border)'};" onclick="window.open('${p.src}','_blank')">
+            <div style="font-size:9px;color:var(--ink-muted);margin-top:2px;">${p.type}<br>${p.date.slice(5)}</div>
+            ${i < scenes.length ? `<div style="font-size:9px;color:var(--accent);font-weight:600;">장면${i+1}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : `<div style="font-size:11px;color:var(--ink-muted);margin-bottom:10px;">📸 사진이 없어요 — 홈에서 사진을 찍으면 장면에 자동 매칭돼요</div>`;
+
   modal.innerHTML = `
     <div class="modal-title">🎬 ${typeLabel} 대본</div>
-    <div style="font-size:11px;color:var(--ink-muted);margin-bottom:12px;">
-      사진 ${photoCount}장 + 최근 데이터 기반 · 복사해서 편집앱에 쓰세요
-    </div>
-    <div style="background:var(--bg-secondary);padding:14px;border-radius:var(--radius-sm);font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:55vh;overflow-y:auto;margin-bottom:14px;">${script.replace(/</g,'&lt;')}</div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal()">닫기</button>
+    <div style="font-size:11px;color:var(--ink-muted);margin-bottom:12px;">사진 ${photoCount}장 + 최근 데이터 기반</div>
+    
+    ${photoSlideHtml}
+
+    <div style="background:var(--bg-secondary);padding:14px;border-radius:var(--radius-sm);font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:40vh;overflow-y:auto;margin-bottom:12px;">${script.replace(/</g,'&lt;')}</div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       <button class="btn btn-primary" onclick="copyVideoScript(this)" data-script="${encodeURIComponent(script)}">📋 대본 복사</button>
+      <button class="btn" onclick="copyPhotosForEditing()" style="background:var(--accent-bg);color:var(--accent);">📱 사진 저장</button>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <button class="btn" onclick="openCapcut()" style="background:#000;color:#fff;border-color:#000;">✂️ 캡컷으로</button>
+      <button class="btn" onclick="openInstaReels()" style="background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border:none;">📸 릴스로</button>
+    </div>
+    <button class="btn" style="width:100%;color:var(--ink-soft);" onclick="closeModal()">닫기</button>
   `;
   overlay.classList.add('show');
   document.body.style.overflow = 'hidden';
+}
+
+function copyPhotosForEditing() {
+  // 이번 주 사진 드라이브 URL 목록 복사
+  let urls = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(state.currentDate);
+    d.setDate(d.getDate() - i);
+    const dayData = state.daily[dateToStr(d)];
+    if (dayData && dayData.photos) {
+      dayData.photos.forEach(p => { if (p.driveUrl) urls.push(p.driveUrl); });
+    }
+  }
+  if (urls.length === 0) {
+    if (typeof toast === 'function') toast('드라이브에 저장된 사진이 없어요. 사진을 먼저 찍어주세요!');
+    return;
+  }
+  navigator.clipboard.writeText(urls.join('\n')).then(() => {
+    if (typeof toast === 'function') toast(`📋 사진 ${urls.length}개 링크 복사됨 - 편집앱에 붙여넣기 하세요!`);
+  }).catch(() => {
+    alert('사진 링크:\n' + urls.join('\n'));
+  });
+}
+
+function openCapcut() {
+  if (typeof toast === 'function') toast('캡컷 앱에서 사진과 대본을 붙여넣어 편집하세요!');
+  window.open('capcut://', '_blank');
+  setTimeout(() => window.open('https://www.capcut.com', '_blank'), 500);
+}
+
+function openInstaReels() {
+  if (typeof toast === 'function') toast('인스타 앱에서 릴스를 만들어보세요!');
+  window.open('instagram://', '_blank');
+  setTimeout(() => window.open('https://www.instagram.com', '_blank'), 500);
 }
 
 function copyVideoScript(btn) {
