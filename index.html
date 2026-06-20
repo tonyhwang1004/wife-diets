@@ -2819,7 +2819,7 @@ async function analyzeWithAI(text) {
         "anthropic-dangerous-direct-browser-access": "true"
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 4096,
         messages: [{ role: "user", content: prompt }]
       })
@@ -3205,7 +3205,7 @@ async function callClaude(prompt, maxTokens = 2048) {
       "anthropic-dangerous-direct-browser-access": "true"
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }]
     })
@@ -6067,6 +6067,31 @@ function finishOnboarding() {
 loadAll();
 setupSpeech();
 render();
+
+// ============================================================
+// 토스트 알림 (사진 업로드 등 각종 피드백 메시지)
+// ============================================================
+function toast(msg, duration = 2500) {
+  let el = document.getElementById('toast-msg');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast-msg';
+    el.style.cssText = `
+      position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+      background:rgba(30,30,30,0.88); color:#fff;
+      padding:10px 20px; border-radius:20px;
+      font-size:13px; z-index:9999;
+      max-width:80vw; text-align:center;
+      pointer-events:none;
+      transition: opacity 0.3s;
+    `;
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.opacity = '0'; }, duration);
+}
 
 // 첫 접속 시 자동 온보딩
 if (!state.settings.profile.onboarded) {
