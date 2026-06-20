@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#FAF7F2">
+<meta name="color-scheme" content="light">
 <title>다이어트 다이어리</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,30 +40,7 @@
     --font-display: 'Fraunces', 'Noto Serif KR', serif;
     --font-body: 'Gowun Dodum', -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1A1714;
-      --bg-card: #252119;
-      --bg-secondary: #2E2920;
-      --bg-tertiary: #3A3528;
-      --ink: #F0EBE0;
-      --ink-soft: #B8B0A2;
-      --ink-muted: #80786C;
-      --accent: #E89B6E;
-      --accent-soft: #4A3526;
-      --accent-bg: #382820;
-      --moss: #A8B57A;
-      --moss-bg: #2A3220;
-      --rose: #E59AAA;
-      --rose-bg: #3A2530;
-      --sky: #94B0BD;
-      --sky-bg: #1F2D33;
-      --gold: #E5C56E;
-      --gold-bg: #3A301A;
-      --border: rgba(240, 235, 224, 0.08);
-      --border-strong: rgba(240, 235, 224, 0.15);
-    }
-  }
+  /* 다크모드 비활성화 - 라이트모드 고정 */
   html, body {
     background: var(--bg);
     color: var(--ink);
@@ -1417,7 +1395,7 @@ let state = {
     openaiKey: '',
     cycle: { lastPeriod: null, length: 28, duration: 5 },
     profile: {
-      onboarded: false,
+      onboarded: true, // Apps Script 환경: 온보딩 스킵
       name: '',
       gender: '여성',
       age: null,
@@ -1540,7 +1518,7 @@ function loadAll() {
       });
       if (!state.settings.profile) {
         state.settings.profile = {
-          onboarded: false,
+          onboarded: true, // Apps Script 환경: 온보딩 스킵
           name: '', gender: '여성', age: null, height: null,
           startWeight: null, targetWeight: null,
           activityLevel: 'light', goalType: 'loss', goalPace: 0.5,
@@ -1551,6 +1529,8 @@ function loadAll() {
       if (state.settings.profile && !state.settings.profile.goalType) state.settings.profile.goalType = 'loss';
       if (!state.settings.cycle) state.settings.cycle = { lastPeriod: null, length: 28, duration: 5 };
       if (!state.daily) state.daily = {};
+      // Apps Script URL에서는 onboarded 항상 true 강제
+      state.settings.profile.onboarded = true;
     }
   } catch (e) { console.error(e); }
 }
@@ -6069,7 +6049,7 @@ setupSpeech();
 render();
 
 // ============================================================
-// 토스트 알림 (사진 업로드·백업 등 피드백 메시지)
+// 토스트 알림
 // ============================================================
 function toast(msg, duration = 2500) {
   let el = document.getElementById('toast-msg');
@@ -6093,9 +6073,8 @@ function toast(msg, duration = 2500) {
 }
 
 // 첫 접속 시 자동 온보딩
-if (!state.settings.profile.onboarded) {
-  setTimeout(() => startOnboarding(), 400);
-}
+// Apps Script 환경에서는 localStorage가 제한적일 수 있어 온보딩 스킵 조건 추가
+// 온보딩 자동 시작 비활성화 (기본값 onboarded:true로 스킵)
 </script>
 </body>
 </html>
