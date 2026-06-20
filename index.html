@@ -6069,22 +6069,21 @@ setupSpeech();
 render();
 
 // ============================================================
-// 토스트 알림 (사진 업로드 등 각종 피드백 메시지)
+// 토스트 알림 (사진 업로드·백업 등 피드백 메시지)
 // ============================================================
 function toast(msg, duration = 2500) {
   let el = document.getElementById('toast-msg');
   if (!el) {
     el = document.createElement('div');
     el.id = 'toast-msg';
-    el.style.cssText = `
-      position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
-      background:rgba(30,30,30,0.88); color:#fff;
-      padding:10px 20px; border-radius:20px;
-      font-size:13px; z-index:9999;
-      max-width:80vw; text-align:center;
-      pointer-events:none;
-      transition: opacity 0.3s;
-    `;
+    el.style.cssText = [
+      'position:fixed', 'bottom:80px', 'left:50%', 'transform:translateX(-50%)',
+      'background:rgba(30,30,30,0.88)', 'color:#fff',
+      'padding:10px 20px', 'border-radius:20px',
+      'font-size:13px', 'z-index:9999',
+      'max-width:80vw', 'text-align:center',
+      'pointer-events:none', 'transition:opacity 0.3s'
+    ].join(';');
     document.body.appendChild(el);
   }
   el.textContent = msg;
