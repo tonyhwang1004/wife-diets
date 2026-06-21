@@ -1166,6 +1166,10 @@
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  @keyframes progress-anim {
+    from { width: 0%; }
+    to { width: 95%; }
+  }
 </style>
 </head>
 <body>
@@ -3213,28 +3217,41 @@ async function callClaude(prompt, maxTokens = 2048) {
     return null;
   }
   
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": state.settings.apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000); // 2분 타임아웃
   
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`AI 오류 ${response.status}: ${err.substring(0, 100)}`);
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": state.settings.apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    
+    if (!response.ok) {
+      const err = await response.text();
+      let errMsg = '';
+      try { errMsg = JSON.parse(err).error?.message || err; } catch { errMsg = err; }
+      throw new Error(`AI 오류 ${response.status}: ${errMsg.substring(0, 150)}`);
+    }
+    
+    const data = await response.json();
+    return data.content.filter(i => i.type === "text").map(i => i.text).join("");
+  } catch(e) {
+    if (e.name === 'AbortError') throw new Error('응답 시간 초과 (2분). 다시 시도해주세요.');
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-  
-  const data = await response.json();
-  return data.content.filter(i => i.type === "text").map(i => i.text).join("");
 }
 
 // 코치에게 보낼 컨텍스트 요약 텍스트 생성
@@ -6129,7 +6146,14 @@ async function generateYoutubeScript(user) {
     return;
   }
 
-  out.innerHTML = `<div style="font-size:12px;color:var(--ink-soft);padding:10px;text-align:center;">🎬 대본을 쓰는 중...</div>`;
+  out.innerHTML = `
+    <div style="font-size:12px;color:var(--ink-soft);padding:10px;text-align:center;">
+      🎬 대본을 쓰는 중... (약 30~60초 소요)
+      <div style="margin-top:8px;height:4px;background:var(--bg-secondary);border-radius:2px;overflow:hidden;">
+        <div style="height:100%;background:var(--accent);border-radius:2px;animation:progress-anim 60s linear forwards;"></div>
+      </div>
+    </div>
+  `;
 
   const latest = records[0];
   const recent = records.slice(0, 7);
