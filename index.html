@@ -3664,7 +3664,9 @@ function showVideoScriptModal(script, type, photoCount) {
       <button class="btn" onclick="openCapcut()" style="background:#000;color:#fff;border-color:#000;">✂️ 캡컷으로</button>
       <button class="btn" onclick="openInstaReels()" style="background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border:none;">📸 릴스로</button>
     </div>
+    <button class="btn" onclick="generateThumbnail(decodeURIComponent('${encodeURIComponent(script)}'))" style="width:100%;background:var(--gold-bg);color:var(--gold);margin-bottom:8px;">🖼️ 썸네일 만들기</button>
     <div id="title-hashtag-result" style="display:none;"></div>
+    <div id="thumbnail-result" style="display:none;"></div>
     <button class="btn" style="width:100%;color:var(--ink-soft);" onclick="closeModal()">닫기</button>
   `;
   overlay.classList.add('show');
@@ -3790,6 +3792,151 @@ ${script.slice(0, 2000)}
     a.click();
     URL.revokeObjectURL(url);
     toast('✅ subtitles.srt 다운로드 완료! 캡컷에서 불러오세요.');
+  } catch(err) {
+    toast('오류: ' + err.message);
+  }
+}
+
+// ============================================================
+// 썸네일 자동 생성 (Canvas)
+// ============================================================
+async function generateThumbnail(script) {
+  try {
+    toast('⏳ 썸네일 문구 생성 중...');
+
+    const profile = state.settings.profile || {};
+    const name = profile.name || '수아';
+
+    // 이번 주 체중 변화 계산
+    let startW = null, endW = null;
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(state.currentDate);
+      d.setDate(d.getDate() - i);
+      const day = state.daily[dateToStr(d)];
+      if (day && day.weight) {
+        if (startW === null) startW = day.weight;
+        endW = day.weight;
+      }
+    }
+    const weightChange = (startW && endW) ? (endW - startW).toFixed(1) : null;
+
+    // AI로 썸네일 문구 생성
+    const prompt = `유튜브 다이어트 썸네일에 들어갈 짧고 강렬한 문구를 만들어주세요.
+
+정보:
+- 이름: ${name}
+- 체중 변화: ${weightChange ? weightChange + 'kg' : '변화 없음'}
+- 대본 핵심: ${script.slice(0, 300)}
+
+다음 형식으로만 답해주세요 (각 줄에 하나씩):
+메인문구: (3~6글자, 강렬하게)
+서브문구: (10~15글자, 구체적 수치 포함)
+하단문구: (${name}의 다이어트 일기 형식)`;
+
+    const result = await callClaude(prompt, 200);
+
+    // 파싱
+    const mainMatch = result.match(/메인문구:\s*(.+)/);
+    const subMatch = result.match(/서브문구:\s*(.+)/);
+    const bottomMatch = result.match(/하단문구:\s*(.+)/);
+
+    const mainText = mainMatch ? mainMatch[1].trim() : (weightChange ? weightChange + 'kg 변화!' : '이번 주 결과');
+    const subText = subMatch ? subMatch[1].trim() : '솔직한 다이어트 기록';
+    const bottomText = bottomMatch ? bottomMatch[1].trim() : name + '의 다이어트 일기';
+
+    // Canvas로 썸네일 그리기 (1280x720)
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext('2d');
+
+    // 배경 그라데이션
+    const grad = ctx.createLinearGradient(0, 0, 1280, 720);
+    grad.addColorStop(0, '#1a0a2e');
+    grad.addColorStop(0.5, '#2d1b4e');
+    grad.addColorStop(1, '#0d1b2a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1280, 720);
+
+    // 장식 원
+    ctx.beginPath();
+    ctx.arc(1100, 150, 300, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(230, 150, 100, 0.08)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(200, 600, 250, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(100, 180, 200, 0.06)';
+    ctx.fill();
+
+    // 메인 문구 (크게)
+    ctx.fillStyle = '#FF6B35';
+    ctx.font = 'bold 160px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(255, 107, 53, 0.5)';
+    ctx.shadowBlur = 30;
+    ctx.fillText(mainText, 80, 320);
+    ctx.shadowBlur = 0;
+
+    // 서브 문구
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 72px sans-serif';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 15;
+    ctx.fillText(subText, 80, 430);
+    ctx.shadowBlur = 0;
+
+    // 하단 문구
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '42px sans-serif';
+    ctx.fillText(bottomText, 80, 520);
+
+    // 체중 변화 배지
+    if (weightChange) {
+      const badgeX = 950, badgeY = 480;
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY - 80, 240, 100, 20);
+      ctx.fillStyle = weightChange < 0 ? 'rgba(100, 200, 120, 0.9)' : 'rgba(230, 100, 100, 0.9)';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 56px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText((weightChange > 0 ? '+' : '') + weightChange + 'kg', badgeX + 120, badgeY - 10);
+      ctx.font = '28px sans-serif';
+      ctx.fillText('이번 주 변화', badgeX + 120, badgeY + 30);
+    }
+
+    // 하단 바
+    ctx.fillStyle = 'rgba(230, 150, 100, 0.15)';
+    ctx.fillRect(0, 640, 1280, 80);
+    ctx.fillStyle = 'rgba(230, 150, 100, 0.8)';
+    ctx.font = '32px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('📱 다이어트 앱으로 기록중 · 매주 업데이트', 40, 690);
+
+    // 다운로드
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'thumbnail.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ thumbnail.png 다운로드 완료!');
+    }, 'image/png');
+
+    // 미리보기
+    const resultDiv = document.getElementById('thumbnail-result');
+    if (resultDiv) {
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = `
+        <div style="margin-top:10px;">
+          <img src="${canvas.toDataURL()}" style="width:100%;border-radius:8px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:var(--ink-muted);margin-top:4px;text-align:center;">thumbnail.png 다운로드됨 · 1280×720</div>
+        </div>
+      `;
+    }
+
   } catch(err) {
     toast('오류: ' + err.message);
   }
