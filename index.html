@@ -1347,9 +1347,14 @@
 
   <!-- 식단 요약 카드 저장 버튼 -->
   <div id="meal-card-btn-area" style="display:none;margin:12px 0 20px;">
-    <button class="btn" onclick="saveMealCardImage()" style="width:100%;background:var(--gold-bg);color:var(--gold);font-size:14px;">
-      🍱 오늘 식단 요약 카드 저장
-    </button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button class="btn" onclick="saveMealCardImage()" style="background:var(--gold-bg);color:var(--gold);font-size:14px;">
+        🍱 식단 카드 (인스타)
+      </button>
+      <button class="btn" onclick="saveShortsImage()" style="background:var(--rose-bg);color:var(--rose);font-size:14px;">
+        📱 쇼츠 세로 이미지
+      </button>
+    </div>
   </div>
 
 </div>
@@ -4407,6 +4412,212 @@ function saveMealCardImage() {
       a.click();
       URL.revokeObjectURL(url);
       toast('✅ 식단 카드 저장됨! 인스타/유튜브에 활용하세요 🍱');
+    }, 'image/png');
+
+  } catch(err) {
+    toast('오류: ' + err.message);
+    console.error(err);
+  }
+}
+
+// ============================================================
+// 쇼츠 세로 이미지 저장 (1080x1920)
+// ============================================================
+function saveShortsImage() {
+  try {
+    const day = getDay();
+    const profile = state.settings.profile || {};
+    const name = profile.name || '수아';
+    const unit = state.settings.weightUnit || 'kg';
+    const meals = ['아침','점심','저녁','간식'];
+    const mealEmoji = { '아침':'🌅', '점심':'☀️', '저녁':'🌙', '간식':'🍎' };
+    const mealColors = { '아침':'#E89B6E', '점심':'#94B0BD', '저녁':'#A8B57A', '간식':'#E5C56E' };
+
+    // 칼로리 계산
+    let totalCal = 0, totalCarbs = 0, totalProtein = 0, totalFat = 0;
+    meals.forEach(m => {
+      (day.foods[m] || []).forEach(f => {
+        totalCal += f.cal || 0;
+        totalCarbs += f.carbs || 0;
+        totalProtein += f.protein || 0;
+        totalFat += f.fat || 0;
+      });
+    });
+
+    const goal = state.settings.goal || 1500;
+    const remaining = goal - totalCal;
+    const isUnder = remaining >= 0;
+
+    // Canvas 1080x1920 (쇼츠 세로)
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+
+    // 배경 그라데이션
+    const bg = ctx.createLinearGradient(0, 0, 0, 1920);
+    bg.addColorStop(0, '#1a0a2e');
+    bg.addColorStop(0.4, '#2d1b4e');
+    bg.addColorStop(1, '#0a1628');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 1080, 1920);
+
+    // 장식 원들
+    ctx.beginPath();
+    ctx.arc(1050, 300, 400, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(232,155,110,0.06)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(50, 1700, 350, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(148,176,189,0.05)';
+    ctx.fill();
+
+    // 상단 로고/이름
+    ctx.fillStyle = '#E89B6E';
+    ctx.font = 'bold 52px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${name}의 다이어트 일기`, 540, 120);
+
+    // 날짜
+    const d = new Date(state.currentDate);
+    const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${['일','월','화','수','목','금','토'][d.getDay()]}요일`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '36px sans-serif';
+    ctx.fillText(dateStr, 540, 175);
+
+    // 메인 칼로리 표시 (크게)
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.roundRect(80, 210, 920, 280, 30);
+    ctx.fill();
+
+    ctx.fillStyle = '#E89B6E';
+    ctx.font = 'bold 140px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(232,155,110,0.4)';
+    ctx.shadowBlur = 30;
+    ctx.fillText(Math.round(totalCal), 540, 380);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '44px sans-serif';
+    ctx.fillText('kcal 섭취', 540, 450);
+
+    // 목표 대비
+    ctx.fillStyle = isUnder ? '#A8B57A' : '#E59AAA';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.fillText(`목표까지 ${isUnder ? '남은 ' : '초과 '}${Math.abs(Math.round(remaining))} kcal`, 540, 510);
+
+    // 탄단지 3개 카드
+    const macroData = [
+      { label: '탄수화물', value: Math.round(totalCarbs) + 'g', color: '#94B0BD' },
+      { label: '단백질', value: Math.round(totalProtein) + 'g', color: '#A8B57A' },
+      { label: '지방', value: Math.round(totalFat) + 'g', color: '#E5C56E' },
+    ];
+    macroData.forEach((m, i) => {
+      const x = 80 + i * 310;
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.beginPath();
+      ctx.roundRect(x, 545, 290, 130, 20);
+      ctx.fill();
+      ctx.fillStyle = m.color;
+      ctx.font = 'bold 56px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(m.value, x + 145, 620);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '30px sans-serif';
+      ctx.fillText(m.label, x + 145, 660);
+    });
+
+    // 식사별 섹션
+    let currentY = 710;
+    const activeMeals = meals.filter(m => (day.foods[m] || []).length > 0);
+
+    activeMeals.forEach((meal) => {
+      const foods = day.foods[meal] || [];
+      const mealCal = foods.reduce((s, f) => s + (f.cal || 0), 0);
+
+      // 섹션 배경
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      ctx.roundRect(80, currentY, 920, 185, 20);
+      ctx.fill();
+
+      // 좌측 컬러 바
+      ctx.fillStyle = mealColors[meal] || '#E89B6E';
+      ctx.beginPath();
+      ctx.roundRect(80, currentY, 10, 185, [20, 0, 0, 20]);
+      ctx.fill();
+
+      // 식사명 + 칼로리
+      ctx.fillStyle = mealColors[meal] || '#E89B6E';
+      ctx.font = 'bold 44px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${mealEmoji[meal]} ${meal}`, 110, currentY + 58);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '34px sans-serif';
+      ctx.fillText(`${Math.round(mealCal)} kcal`, 110, currentY + 100);
+
+      // 음식 목록
+      const foodNames = foods.map(f => f.name).join(' · ');
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = '32px sans-serif';
+      let displayText = foodNames;
+      while (ctx.measureText(displayText).width > 860 && displayText.length > 0) {
+        displayText = displayText.slice(0, -4) + '...';
+      }
+      ctx.fillText(displayText, 110, currentY + 155);
+
+      currentY += 205;
+    });
+
+    // 체중/물 정보
+    if (day.weight || day.water) {
+      currentY += 20;
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      ctx.roundRect(80, currentY, 920, 110, 20);
+      ctx.fill();
+
+      ctx.textAlign = 'left';
+      if (day.weight) {
+        ctx.fillStyle = '#94B0BD';
+        ctx.font = 'bold 44px sans-serif';
+        ctx.fillText(`⚖️ ${day.weight}${unit}`, 110, currentY + 68);
+      }
+      if (day.water) {
+        ctx.fillStyle = '#94B0BD';
+        ctx.font = 'bold 44px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(`💧 ${day.water}ml`, 970, currentY + 68);
+      }
+      currentY += 130;
+    }
+
+    // 하단 CTA
+    ctx.fillStyle = '#E89B6E';
+    ctx.beginPath();
+    ctx.roundRect(80, 1780, 920, 90, 45);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('📱 구독하고 같이 다이어트해요!', 540, 1836);
+
+    // 워터마크
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.font = '28px sans-serif';
+    ctx.fillText('다이어트 기록 앱', 540, 1900);
+
+    // 다운로드
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `shorts_${state.currentDate}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ 쇼츠 이미지 저장됨! (1080×1920)');
     }, 'image/png');
 
   } catch(err) {
