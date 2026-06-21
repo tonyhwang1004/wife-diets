@@ -3725,6 +3725,313 @@ function openInstaReels() {
 }
 
 
+
+// ============================================================
+// Before/After 비교 사진 생성 (1080x1080)
+// ============================================================
+function makeBeforeAfterImage() {
+  // 전체 기간에서 가장 오래된 사진과 최근 사진 찾기
+  const allDates = Object.keys(state.daily).sort();
+  let beforePhoto = null, afterPhoto = null;
+  let beforeDate = null, afterDate = null;
+  let beforeWeight = null, afterWeight = null;
+
+  // 가장 오래된 사진
+  for (let i = 0; i < allDates.length; i++) {
+    const d = state.daily[allDates[i]];
+    if (d && d.photos && d.photos.length > 0) {
+      const p = d.photos.find(p => p.img || p.driveUrl);
+      if (p) {
+        beforePhoto = p.driveUrl || p.img;
+        beforeDate = allDates[i];
+        beforeWeight = d.weight;
+        break;
+      }
+    }
+  }
+
+  // 가장 최근 사진
+  for (let i = allDates.length - 1; i >= 0; i--) {
+    const d = state.daily[allDates[i]];
+    if (d && d.photos && d.photos.length > 0) {
+      const p = d.photos.find(p => p.img || p.driveUrl);
+      if (p && allDates[i] !== beforeDate) {
+        afterPhoto = p.driveUrl || p.img;
+        afterDate = allDates[i];
+        afterWeight = d.weight;
+        break;
+      }
+    }
+  }
+
+  if (!beforePhoto && !afterPhoto) {
+    // 사진 없으면 체중 데이터로만 만들기
+    makeBeforeAfterWeightOnly();
+    return;
+  }
+
+  if (!afterPhoto) {
+    afterPhoto = beforePhoto;
+    afterDate = beforeDate;
+    afterWeight = beforeWeight;
+    beforePhoto = null;
+  }
+
+  const profile = state.settings.profile || {};
+  const name = profile.name || '수아';
+  const unit = state.settings.weightUnit || 'kg';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+
+  // 배경
+  ctx.fillStyle = '#0d0d0d';
+  ctx.fillRect(0, 0, 1080, 1080);
+
+  // 상단 타이틀
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 56px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${name}의 다이어트 변화`, 540, 80);
+
+  const drawSide = (imgSrc, label, date, weight, x, w, done) => {
+    if (!imgSrc) {
+      // 사진 없으면 텍스트만
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(x, 100, w, 800);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = '48px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('📷', x + w/2, 520);
+      ctx.fillText('사진 없음', x + w/2, 580);
+      done();
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      // 이미지 클립
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, 100, w, 800);
+      ctx.clip();
+      // 비율 유지하며 채우기
+      const scale = Math.max(w / img.width, 800 / img.height);
+      const dw = img.width * scale, dh = img.height * scale;
+      ctx.drawImage(img, x + (w - dw) / 2, 100 + (800 - dh) / 2, dw, dh);
+      ctx.restore();
+      done();
+    };
+    img.onerror = () => done();
+    img.src = imgSrc;
+  };
+
+  let loaded = 0;
+  const checkDone = () => {
+    loaded++;
+    if (loaded < 2) return;
+
+    // 중앙 구분선
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(538, 100, 4, 800);
+
+    // BEFORE 레이블
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 100, 540, 90);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('BEFORE', 270, 162);
+
+    // AFTER 레이블
+    ctx.fillStyle = 'rgba(232,155,110,0.85)';
+    ctx.fillRect(542, 100, 538, 90);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('AFTER', 810, 162);
+
+    // 하단 정보 패널
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(0, 850, 1080, 230);
+
+    // Before 정보
+    if (beforeDate) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(beforeDate, 270, 910);
+      if (beforeWeight) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 64px sans-serif';
+        ctx.fillText(beforeWeight + unit, 270, 985);
+      }
+    }
+
+    // After 정보
+    if (afterDate) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(afterDate, 810, 910);
+      if (afterWeight) {
+        ctx.fillStyle = '#E89B6E';
+        ctx.font = 'bold 64px sans-serif';
+        ctx.fillText(afterWeight + unit, 810, 985);
+      }
+    }
+
+    // 중앙 변화량
+    if (beforeWeight && afterWeight) {
+      const diff = (afterWeight - beforeWeight).toFixed(1);
+      const isDown = diff < 0;
+      ctx.fillStyle = isDown ? '#A8B57A' : '#E59AAA';
+      ctx.font = 'bold 52px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText((isDown ? '▼ ' : '▲ ') + Math.abs(diff) + unit, 540, 960);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '28px sans-serif';
+      ctx.fillText('총 변화', 540, 1000);
+    }
+
+    // 하단 워터마크
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.font = '24px sans-serif';
+    ctx.fillText('📱 다이어트 기록 앱', 540, 1060);
+
+    // 다운로드
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `before_after_${state.currentDate}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ Before/After 이미지 저장됨! 1080×1080');
+    }, 'image/png');
+  };
+
+  drawSide(beforePhoto, 'BEFORE', beforeDate, beforeWeight, 0, 538, checkDone);
+  drawSide(afterPhoto, 'AFTER', afterDate, afterWeight, 542, 538, checkDone);
+}
+
+// 사진 없을 때 체중 데이터만으로 Before/After
+function makeBeforeAfterWeightOnly() {
+  const allDates = Object.keys(state.daily).sort();
+  let firstW = null, lastW = null, firstDate = null, lastDate = null;
+
+  for (const d of allDates) {
+    const day = state.daily[d];
+    if (day && day.weight) {
+      if (!firstW) { firstW = day.weight; firstDate = d; }
+      lastW = day.weight; lastDate = d;
+    }
+  }
+
+  if (!firstW) { toast('체중 기록이 없어요! 체중을 먼저 기록해주세요.'); return; }
+
+  const profile = state.settings.profile || {};
+  const name = profile.name || '수아';
+  const unit = state.settings.weightUnit || 'kg';
+  const diff = (lastW - firstW).toFixed(1);
+  const isDown = diff < 0;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+
+  // 배경
+  const bg = ctx.createLinearGradient(0, 0, 1080, 1080);
+  bg.addColorStop(0, '#1a0a2e');
+  bg.addColorStop(1, '#0a1628');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 1080, 1080);
+
+  // 타이틀
+  ctx.fillStyle = '#E89B6E';
+  ctx.font = 'bold 60px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(232,155,110,0.4)';
+  ctx.shadowBlur = 20;
+  ctx.fillText(`${name}의 다이어트 결과`, 540, 120);
+  ctx.shadowBlur = 0;
+
+  // Before 카드
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.beginPath();
+  ctx.roundRect(80, 180, 420, 520, 24);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '36px sans-serif';
+  ctx.fillText('BEFORE', 290, 250);
+  ctx.fillStyle = '#fff';
+  ctx.font = '30px sans-serif';
+  ctx.fillText(firstDate, 290, 300);
+  ctx.font = 'bold 110px sans-serif';
+  ctx.fillText(firstW, 290, 430);
+  ctx.font = '44px sans-serif';
+  ctx.fillText(unit, 290, 490);
+  ctx.font = '36px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillText('시작 체중', 290, 560);
+  ctx.fillText('📷 사진을', 290, 610);
+  ctx.fillText('추가하세요!', 290, 655);
+
+  // After 카드
+  ctx.fillStyle = 'rgba(232,155,110,0.1)';
+  ctx.beginPath();
+  ctx.roundRect(580, 180, 420, 520, 24);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(232,155,110,0.4)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#E89B6E';
+  ctx.font = '36px sans-serif';
+  ctx.fillText('AFTER', 790, 250);
+  ctx.fillStyle = '#fff';
+  ctx.font = '30px sans-serif';
+  ctx.fillText(lastDate, 790, 300);
+  ctx.font = 'bold 110px sans-serif';
+  ctx.fillText(lastW, 790, 430);
+  ctx.font = '44px sans-serif';
+  ctx.fillText(unit, 790, 490);
+  ctx.font = '36px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillText('현재 체중', 790, 560);
+
+  // 중앙 변화량 배지
+  ctx.fillStyle = isDown ? '#A8B57A' : '#E59AAA';
+  ctx.beginPath();
+  ctx.roundRect(340, 450, 400, 180, 90);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 86px sans-serif';
+  ctx.fillText((isDown ? '▼' : '▲') + Math.abs(diff) + unit, 540, 560);
+  ctx.font = '34px sans-serif';
+  ctx.fillText(isDown ? '감량 성공! 🎉' : '증가', 540, 605);
+
+  // 기간
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = '30px sans-serif';
+  ctx.fillText(`${firstDate} ~ ${lastDate}`, 540, 770);
+
+  // 워터마크
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.font = '26px sans-serif';
+  ctx.fillText('📱 다이어트 기록 앱', 540, 1040);
+
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `before_after_${state.currentDate}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✅ Before/After 이미지 저장됨!');
+  }, 'image/png');
+}
+
 // ============================================================
 // VED 영상 편집 서버 연동
 // ============================================================
@@ -6601,6 +6908,7 @@ function renderWeightPage() {
       <button class="btn btn-primary" onclick="openModal('weight')">오늘 체중 기록</button>
       <button class="btn" onclick="saveWeightChartImage()" style="background:var(--moss-bg);color:var(--moss);">📸 그래프 저장</button>
     </div>
+    <button class="btn" onclick="makeBeforeAfterImage()" style="width:100%;margin-top:8px;background:var(--rose-bg);color:var(--rose);">⚡ Before/After 비교 사진 만들기</button>
   `;
 }
 
