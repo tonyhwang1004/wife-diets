@@ -40,7 +40,7 @@
     --font-display: 'Fraunces', 'Noto Serif KR', serif;
     --font-body: 'Gowun Dodum', -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  /* 다크모드 비활성화 - 라이트모드 고정 */
+  /* 다크모드 비활성화 - 항상 라이트모드 고정 */
   html, body {
     background: var(--bg);
     color: var(--ink);
@@ -53,7 +53,10 @@
   body {
     max-width: 480px;
     margin: 0 auto;
-    padding: 0 16px 100px;
+    padding: 0 16px 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
     position: relative;
   }
   h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; }
@@ -255,6 +258,16 @@
     transition: transform 0.15s, border-color 0.15s;
     position: relative;
     overflow: hidden;
+    /* button 기본 스타일 초기화 */
+    text-align: left;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   .stat-card:active { transform: scale(0.98); }
   .stat-card:hover { border-color: var(--border-strong); }
@@ -872,27 +885,26 @@
     font-style: italic;
   }
 
-  /* 모달 */
+  /* 모달 - Apps Script iframe 대응 */
+  html, body { height: 100%; }
   .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
-    z-index: 100;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    min-height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9999;
     display: none;
-    align-items: flex-end;
+    align-items: flex-start;
     justify-content: center;
     padding: 0;
-  }
-  @media (min-width: 480px) {
-    .modal-overlay { align-items: center; padding: 20px; }
   }
   .modal-overlay.show { display: flex; }
   .modal {
     background: var(--bg);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-radius: var(--radius-lg);
     padding: 24px 20px;
-    width: 100%;
+    width: calc(100% - 32px);
     max-width: 480px;
     max-height: 88vh;
     overflow-y: auto;
@@ -1079,11 +1091,12 @@
     vertical-align: middle;
   }
 
-  /* 하단 탭 */
+  /* 하단 탭 - Apps Script iframe 대응 */
   .bottom-tabs {
-    position: fixed;
+    position: sticky;
     bottom: 0;
     left: 0; right: 0;
+    width: 100%;
     background: var(--bg-card);
     border-top: 1px solid var(--border);
     display: flex;
@@ -1146,8 +1159,8 @@
   }
 
   /* 페이지 전환 */
-  .page { display: none; }
-  .page.active { display: block; }
+  .page { display: none; flex: 1; padding-bottom: 80px; }
+  .page.active { display: block; flex: 1; }
 
   /* 스크롤바 */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1227,26 +1240,26 @@
 
   <!-- 4개 스탯 카드 -->
   <div class="stat-grid">
-    <div class="stat-card weight" onclick="openModal('weight')">
-      <div class="stat-icon">⚖</div>
+    <button class="stat-card weight" onclick="openModal('weight')" type="button">
+      <div class="stat-icon">⚖</button>
       <div class="stat-label">체중</div>
       <div class="stat-value"><span id="weight-val">—</span><span class="stat-unit" id="weight-unit"></span></div>
       <div class="stat-trend" id="weight-trend">기록하기</div>
     </div>
-    <div class="stat-card water" onclick="openModal('water')">
-      <div class="stat-icon">◯</div>
+    <button class="stat-card water" onclick="openModal('water')" type="button">
+      <div class="stat-icon">◯</button>
       <div class="stat-label">물</div>
       <div class="stat-value"><span id="water-val">0</span><span class="stat-unit">/ 8잔</span></div>
       <div class="stat-trend" id="water-trend">— ml</div>
     </div>
-    <div class="stat-card exercise" onclick="openModal('exercise')">
-      <div class="stat-icon">◊</div>
+    <button class="stat-card exercise" onclick="openModal('exercise')" type="button">
+      <div class="stat-icon">◊</button>
       <div class="stat-label">운동</div>
       <div class="stat-value"><span id="exercise-val">0</span><span class="stat-unit">kcal</span></div>
       <div class="stat-trend" id="exercise-trend">기록하기</div>
     </div>
-    <div class="stat-card sleep" onclick="openModal('sleep')">
-      <div class="stat-icon">☾</div>
+    <button class="stat-card sleep" onclick="openModal('sleep')" type="button">
+      <div class="stat-icon">☾</button>
       <div class="stat-label">수면</div>
       <div class="stat-value"><span id="sleep-val">—</span><span class="stat-unit" id="sleep-unit"></span></div>
       <div class="stat-trend" id="sleep-trend">기록하기</div>
@@ -1395,7 +1408,7 @@ let state = {
     openaiKey: '',
     cycle: { lastPeriod: null, length: 28, duration: 5 },
     profile: {
-      onboarded: true, // Apps Script 환경: 온보딩 스킵
+      onboarded: false,
       name: '',
       gender: '여성',
       age: null,
@@ -1518,7 +1531,7 @@ function loadAll() {
       });
       if (!state.settings.profile) {
         state.settings.profile = {
-          onboarded: true, // Apps Script 환경: 온보딩 스킵
+          onboarded: false,
           name: '', gender: '여성', age: null, height: null,
           startWeight: null, targetWeight: null,
           activityLevel: 'light', goalType: 'loss', goalPace: 0.5,
@@ -1529,8 +1542,6 @@ function loadAll() {
       if (state.settings.profile && !state.settings.profile.goalType) state.settings.profile.goalType = 'loss';
       if (!state.settings.cycle) state.settings.cycle = { lastPeriod: null, length: 28, duration: 5 };
       if (!state.daily) state.daily = {};
-      // Apps Script URL에서는 onboarded 항상 true 강제
-      state.settings.profile.onboarded = true;
     }
   } catch (e) { console.error(e); }
 }
@@ -2210,21 +2221,31 @@ function openModal(type, data) {
   const overlay = document.getElementById('modal-overlay');
   const modal = document.getElementById('modal');
   modal.innerHTML = getModalContent(type, data);
+  // Apps Script iframe 대응: 스크롤 위치에 맞춰 모달 위치 조정
+  const scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+  overlay.style.top = scrollY + 'px';
+  overlay.style.minHeight = window.innerHeight + 'px';
   overlay.classList.add('show');
-  document.body.style.overflow = 'hidden';
+  overlay.style.display = 'flex';
+  // 모달을 화면 중앙에
+  modal.style.marginTop = Math.max(20, (window.innerHeight - modal.offsetHeight) / 2) + 'px';
   setTimeout(() => {
-    if (type === 'exercise') {
-      onExerciseTypeChange(); // 러닝 상세 초기 표시 (기본값 슬로우러닝)
-    }
+    modal.style.marginTop = Math.max(20, (window.innerHeight - modal.offsetHeight) / 2) + 'px';
+    if (type === 'exercise') onExerciseTypeChange();
     if (type === 'aiPreview') return;
     const firstInput = modal.querySelector('input, textarea');
     if (firstInput) firstInput.focus();
-  }, 100);
+  }, 50);
 }
 
 function closeModal() {
-  document.getElementById('modal-overlay').classList.remove('show');
+  const overlay = document.getElementById('modal-overlay');
+  overlay.classList.remove('show');
+  overlay.style.display = '';
+  overlay.style.top = '';
+  overlay.style.minHeight = '';
   document.body.style.overflow = '';
+  document.documentElement.style.overflow = '';
 }
 
 function getModalContent(type, data) {
@@ -3636,9 +3657,14 @@ function showVideoScriptModal(script, type, photoCount) {
       <button class="btn" onclick="copyPhotosForEditing()" style="background:var(--accent-bg);color:var(--accent);">📱 사진 저장</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <button class="btn" onclick="generateTitleHashtag(this, decodeURIComponent('${encodeURIComponent(script)}'))" style="background:var(--moss-bg);color:var(--moss);">🏷️ 제목/해시태그</button>
+      <button class="btn" onclick="generateSRT(decodeURIComponent('${encodeURIComponent(script)}'))" style="background:var(--sky-bg);color:var(--sky);">📄 자막(.srt)</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       <button class="btn" onclick="openCapcut()" style="background:#000;color:#fff;border-color:#000;">✂️ 캡컷으로</button>
       <button class="btn" onclick="openInstaReels()" style="background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border:none;">📸 릴스로</button>
     </div>
+    <div id="title-hashtag-result" style="display:none;"></div>
     <button class="btn" style="width:100%;color:var(--ink-soft);" onclick="closeModal()">닫기</button>
   `;
   overlay.classList.add('show');
@@ -3677,6 +3703,96 @@ function openInstaReels() {
   if (typeof toast === 'function') toast('인스타 앱에서 릴스를 만들어보세요!');
   window.open('instagram://', '_blank');
   setTimeout(() => window.open('https://www.instagram.com', '_blank'), 500);
+}
+
+// ============================================================
+// 유튜브 제목/해시태그 자동 생성
+// ============================================================
+async function generateTitleHashtag(btn, script) {
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ 생성 중...';
+  try {
+    const profile = state.settings.profile || {};
+    const name = profile.name || '수아';
+    const prompt = `아래 유튜브 대본을 보고 다음을 생성해주세요.
+
+대본:
+${script.slice(0, 1500)}
+
+다음 형식으로만 답해주세요:
+
+🎬 제목 후보 5개:
+1. (클릭율 높은 제목)
+2.
+3.
+4.
+5.
+
+📌 유튜브 설명란 첫 줄 (1줄 요약):
+
+🏷️ 해시태그 20개:
+#다이어트 #다이어트일기 (나머지 18개)
+
+💡 최적 업로드 시간: (요일 + 시간대 추천)`;
+
+    const result = await callClaude(prompt, 1500);
+
+    // 결과를 모달 안 새 div에 표시
+    const resultDiv = document.getElementById('title-hashtag-result');
+    if (resultDiv) {
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = `
+        <div style="background:var(--bg-secondary);padding:14px;border-radius:var(--radius-sm);font-size:13px;line-height:1.8;white-space:pre-wrap;margin-top:10px;max-height:35vh;overflow-y:auto;">${result.replace(/</g,'&lt;')}</div>
+        <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="
+          navigator.clipboard.writeText(decodeURIComponent('${encodeURIComponent(result)}')).then(()=>toast('✅ 제목/해시태그 복사됨!')).catch(()=>alert(decodeURIComponent('${encodeURIComponent(result)}')));
+        ">📋 전체 복사</button>
+      `;
+    }
+  } catch(err) {
+    toast('오류: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+  }
+}
+
+// ============================================================
+// 자막 파일 (.srt) 자동 생성
+// ============================================================
+async function generateSRT(script) {
+  try {
+    toast('⏳ 자막 생성 중...');
+    const prompt = `아래 유튜브 대본의 멘트 부분만 추출해서 SRT 자막 형식으로 변환해주세요.
+각 장면의 멘트를 3~5초 간격으로 나눠서 타임코드를 붙여주세요.
+SRT 형식만 출력하고 다른 설명은 쓰지 마세요.
+
+대본:
+${script.slice(0, 2000)}
+
+출력 형식:
+1
+00:00:00,000 --> 00:00:03,000
+(첫 번째 자막 텍스트)
+
+2
+00:00:03,000 --> 00:00:06,000
+(두 번째 자막 텍스트)`;
+
+    const srt = await callClaude(prompt, 2000);
+
+    // SRT 파일 다운로드
+    const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'subtitles.srt';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✅ subtitles.srt 다운로드 완료! 캡컷에서 불러오세요.');
+  } catch(err) {
+    toast('오류: ' + err.message);
+  }
 }
 
 function copyVideoScript(btn) {
@@ -6049,7 +6165,7 @@ setupSpeech();
 render();
 
 // ============================================================
-// 토스트 알림
+// 토스트 알림 (사진 업로드·백업 등 피드백 메시지)
 // ============================================================
 function toast(msg, duration = 2500) {
   let el = document.getElementById('toast-msg');
@@ -6073,8 +6189,9 @@ function toast(msg, duration = 2500) {
 }
 
 // 첫 접속 시 자동 온보딩
-// Apps Script 환경에서는 localStorage가 제한적일 수 있어 온보딩 스킵 조건 추가
-// 온보딩 자동 시작 비활성화 (기본값 onboarded:true로 스킵)
+if (!state.settings.profile.onboarded) {
+  setTimeout(() => startOnboarding(), 400);
+}
 </script>
 </body>
 </html>
