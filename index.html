@@ -3942,6 +3942,231 @@ async function generateThumbnail(script) {
   }
 }
 
+// ============================================================
+// 체중 변화 그래프 이미지 저장
+// ============================================================
+function saveWeightChartImage() {
+  try {
+    const profile = state.settings.profile || {};
+    const name = profile.name || '수아';
+    const unit = state.settings.weightUnit || 'kg';
+
+    // 최근 30일 데이터 수집
+    const today = new Date(state.currentDate);
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const ds = dateToStr(d);
+      const data = state.daily[ds];
+      days.push({
+        date: ds,
+        label: `${d.getMonth()+1}/${d.getDate()}`,
+        weight: data?.weight || null
+      });
+    }
+
+    const wDays = days.filter(d => d.weight);
+    if (wDays.length < 2) {
+      toast('체중 기록이 2개 이상 필요해요!');
+      return;
+    }
+
+    const weights = wDays.map(d => d.weight);
+    const minW = Math.min(...weights) - 0.3;
+    const maxW = Math.max(...weights) + 0.3;
+    const first = wDays[0].weight;
+    const last = wDays[wDays.length-1].weight;
+    const change = (last - first).toFixed(1);
+    const isDown = last < first;
+
+    // Canvas 설정 (1080x1080 인스타 정사각형)
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1080;
+    const ctx = canvas.getContext('2d');
+
+    // 배경
+    const bg = ctx.createLinearGradient(0, 0, 0, 1080);
+    bg.addColorStop(0, '#FAF7F2');
+    bg.addColorStop(1, '#F0EBE0');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 1080, 1080);
+
+    // 상단 헤더
+    ctx.fillStyle = '#E89B6E';
+    ctx.fillRect(0, 0, 1080, 140);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 52px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${name}의 체중 변화`, 50, 80);
+    ctx.font = '34px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText(`최근 30일 · ${wDays[0].label} ~ ${wDays[wDays.length-1].label}`, 50, 125);
+
+    // 변화 배지 (우상단)
+    ctx.fillStyle = isDown ? '#A8B57A' : '#E59AAA';
+    ctx.beginPath();
+    ctx.roundRect(780, 25, 260, 90, 16);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 52px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText((isDown ? '▼ ' : '▲ ') + Math.abs(change) + unit, 910, 85);
+
+    // 현재 체중 카드
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.08)';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.roundRect(40, 160, 480, 130, 16);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#80786C';
+    ctx.font = '30px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('현재 체중', 70, 210);
+    ctx.fillStyle = '#2A2520';
+    ctx.font = 'bold 64px sans-serif';
+    ctx.fillText(`${last.toFixed(1)} ${unit}`, 70, 275);
+
+    // 목표 체중 카드
+    const targetW = profile.targetWeight;
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.08)';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.roundRect(560, 160, 480, 130, 16);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#80786C';
+    ctx.font = '30px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('목표까지', 590, 210);
+    ctx.fillStyle = '#E89B6E';
+    ctx.font = 'bold 64px sans-serif';
+    const toGoal = targetW ? (last - targetW).toFixed(1) : '-';
+    ctx.fillText(targetW ? `${toGoal > 0 ? '' : ''}${toGoal} ${unit}` : '목표 미설정', 590, 275);
+
+    // 그래프 영역
+    const gX = 60, gY = 320, gW = 960, gH = 560;
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.06)';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.roundRect(gX - 20, gY - 20, gW + 40, gH + 40, 20);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    const pad = 60;
+    const xStep = (gW - pad * 2) / (days.length - 1);
+    const yScale = val => gY + gH - pad - ((val - minW) / (maxW - minW)) * (gH - pad * 2);
+
+    // Y축 눈금선
+    const ySteps = 5;
+    for (let i = 0; i <= ySteps; i++) {
+      const val = minW + (maxW - minW) * (i / ySteps);
+      const y = yScale(val);
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(gX + pad, y);
+      ctx.lineTo(gX + gW - pad, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#B8B0A2';
+      ctx.font = '22px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(val.toFixed(1), gX + pad - 10, y + 8);
+    }
+
+    // 그래프 선 (그라데이션 영역)
+    const pts = [];
+    days.forEach((d, i) => {
+      if (d.weight) {
+        pts.push({ x: gX + pad + i * xStep, y: yScale(d.weight), w: d.weight });
+      }
+    });
+
+    if (pts.length >= 2) {
+      // 영역 채우기
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      pts.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.lineTo(pts[pts.length-1].x, gY + gH - pad);
+      ctx.lineTo(pts[0].x, gY + gH - pad);
+      ctx.closePath();
+      const areaGrad = ctx.createLinearGradient(0, gY, 0, gY + gH);
+      areaGrad.addColorStop(0, 'rgba(232, 155, 110, 0.25)');
+      areaGrad.addColorStop(1, 'rgba(232, 155, 110, 0)');
+      ctx.fillStyle = areaGrad;
+      ctx.fill();
+
+      // 선
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      pts.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.strokeStyle = '#E89B6E';
+      ctx.lineWidth = 4;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // 점
+      pts.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, i === pts.length - 1 ? 10 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = i === pts.length - 1 ? '#E89B6E' : '#fff';
+        ctx.strokeStyle = '#E89B6E';
+        ctx.lineWidth = 3;
+        ctx.fill();
+        ctx.stroke();
+      });
+
+      // 최저/최고 표시
+      const minPt = pts.reduce((a, b) => a.w < b.w ? a : b);
+      const maxPt = pts.reduce((a, b) => a.w > b.w ? a : b);
+      ctx.fillStyle = '#A8B57A';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('▼ ' + minPt.w.toFixed(1), minPt.x, minPt.y + 35);
+      ctx.fillStyle = '#E59AAA';
+      ctx.fillText('▲ ' + maxPt.w.toFixed(1), maxPt.x, maxPt.y - 15);
+    }
+
+    // X축 날짜 (첫날, 중간, 마지막)
+    ctx.fillStyle = '#B8B0A2';
+    ctx.font = '24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(days[0].label, gX + pad, gY + gH - 5);
+    ctx.fillText(days[14].label, gX + pad + 14 * xStep, gY + gH - 5);
+    ctx.fillText(days[29].label, gX + gW - pad, gY + gH - 5);
+
+    // 하단 워터마크
+    ctx.fillStyle = 'rgba(42,37,32,0.25)';
+    ctx.font = '26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('📱 다이어트 기록 앱', 540, 1055);
+
+    // 다운로드
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `weight_chart_${state.currentDate}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ 그래프 이미지 저장됨! 인스타/유튜브에 활용하세요');
+    }, 'image/png');
+
+  } catch(err) {
+    toast('오류: ' + err.message);
+  }
+}
+
 function copyVideoScript(btn) {
   const script = decodeURIComponent(btn.dataset.script);
   navigator.clipboard.writeText(script).then(() => {
@@ -5703,8 +5928,9 @@ function renderWeightPage() {
       </div>
     ` : ''}
 
-    <div style="text-align:center;margin-top:16px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px;">
       <button class="btn btn-primary" onclick="openModal('weight')">오늘 체중 기록</button>
+      <button class="btn" onclick="saveWeightChartImage()" style="background:var(--moss-bg);color:var(--moss);">📸 그래프 저장</button>
     </div>
   `;
 }
