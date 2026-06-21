@@ -3682,6 +3682,7 @@ function showVideoScriptModal(script, type, photoCount) {
     </div>
     <button class="btn" onclick="generateThumbnail(decodeURIComponent('${encodeURIComponent(script)}'))" style="width:100%;background:var(--gold-bg);color:var(--gold);margin-bottom:8px;">🖼️ 썸네일 만들기</button>
     <button class="btn" onclick="sendToVed(decodeURIComponent('${encodeURIComponent(script)}'))" style="width:100%;background:var(--sky-bg);color:var(--sky);margin-bottom:8px;">🎬 VED로 영상 자동 생성</button>
+    <button class="btn" onclick="recommendBGM(this, decodeURIComponent('${encodeURIComponent(script)}'))" style="width:100%;background:var(--accent-bg);color:var(--accent);margin-bottom:8px;">🎵 BGM 자동 추천</button>
     <div id="title-hashtag-result" style="display:none;"></div>
     <div id="thumbnail-result" style="display:none;"></div>
     <button class="btn" style="width:100%;color:var(--ink-soft);" onclick="closeModal()">닫기</button>
@@ -3725,6 +3726,64 @@ function openInstaReels() {
 }
 
 
+
+
+// ============================================================
+// BGM 자동 추천
+// ============================================================
+async function recommendBGM(btn, script) {
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ BGM 추천 중...';
+
+  try {
+    const prompt = `아래 유튜브 다이어트 영상 대본의 분위기를 분석해서 BGM을 추천해주세요.
+
+대본:
+${script.slice(0, 500)}
+
+다음 형식으로만 답해주세요:
+
+🎵 추천 BGM 5개:
+
+1. 곡명: (곡 이름)
+   아티스트: (아티스트)
+   분위기: (밝음/잔잔함/동기부여/귀여움 등)
+   어울리는 장면: (어떤 장면에 쓰면 좋은지)
+   유튜브 무료 여부: (유튜브 오디오 라이브러리 무료 / 저작권 주의)
+
+2. (같은 형식)
+... (5개)
+
+💡 편집 팁: (캡컷에서 BGM 사용 시 주의사항)`;
+
+    const result = await callClaude(prompt, 1500);
+
+    // BGM 결과를 모달 안에 표시
+    const resultDiv = document.getElementById('title-hashtag-result');
+    if (resultDiv) {
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = `
+        <div style="margin-top:10px;">
+          <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:8px;">🎵 BGM 추천 결과</div>
+          <div style="background:var(--bg-secondary);padding:14px;border-radius:var(--radius-sm);font-size:12px;line-height:1.8;white-space:pre-wrap;max-height:35vh;overflow-y:auto;">${result.replace(/</g,'&lt;')}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+            <button class="btn" onclick="navigator.clipboard.writeText(decodeURIComponent('${encodeURIComponent(result)}')).then(()=>toast('✅ BGM 추천 복사됨!')).catch(()=>alert(decodeURIComponent('${encodeURIComponent(result)}')))" style="font-size:12px;">📋 복사</button>
+            <a href="https://studio.youtube.com/channel/music" target="_blank" style="text-decoration:none;">
+              <button class="btn" style="width:100%;font-size:12px;background:var(--rose-bg);color:var(--rose);">🎵 유튜브 오디오 라이브러리</button>
+            </a>
+          </div>
+        </div>
+      `;
+    }
+    toast('✅ BGM 추천 완료!');
+  } catch(err) {
+    toast('오류: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+  }
+}
 
 // ============================================================
 // Before/After 비교 사진 생성 (1080x1080)
