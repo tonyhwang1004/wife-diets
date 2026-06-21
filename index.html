@@ -1461,7 +1461,8 @@ let state = {
       url: '',          // Apps Script 웹앱 URL
       userName: '',     // 시트에 기록될 사용자 이름 (예: 지은)
       autoSync: true    // 기록 시 자동 전송
-    }
+    },
+    vedUrl: ''          // VED 영상 편집 서버 URL (예: http://localhost:5679)
   }
 };
 
@@ -2320,6 +2321,7 @@ function getModalContent(type, data) {
 
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
         <button class="btn" style="width:100%;margin-bottom:8px;background:var(--accent);color:white;" onclick="openGoogleSheetSettings()">📊 구글시트 연동 (가족 공유)</button>
+        <button class="btn" style="width:100%;margin-bottom:8px;background:var(--sky-bg);color:var(--sky);" onclick="openVedSettings()">🎬 VED 영상 편집 서버 연동</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeModal();switchPage('family');">👨‍👩‍👧 가족 기록 보기</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="openCoupangSettings()">🛒 쿠팡 파트너스 링크 설정</button>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeModal();startOnboarding();">내 정보 다시 등록</button>
@@ -3679,6 +3681,7 @@ function showVideoScriptModal(script, type, photoCount) {
       <button class="btn" onclick="openInstaReels()" style="background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border:none;">📸 릴스로</button>
     </div>
     <button class="btn" onclick="generateThumbnail(decodeURIComponent('${encodeURIComponent(script)}'))" style="width:100%;background:var(--gold-bg);color:var(--gold);margin-bottom:8px;">🖼️ 썸네일 만들기</button>
+    <button class="btn" onclick="sendToVed(decodeURIComponent('${encodeURIComponent(script)}'))" style="width:100%;background:var(--sky-bg);color:var(--sky);margin-bottom:8px;">🎬 VED로 영상 자동 생성</button>
     <div id="title-hashtag-result" style="display:none;"></div>
     <div id="thumbnail-result" style="display:none;"></div>
     <button class="btn" style="width:100%;color:var(--ink-soft);" onclick="closeModal()">닫기</button>
@@ -3719,6 +3722,213 @@ function openInstaReels() {
   if (typeof toast === 'function') toast('인스타 앱에서 릴스를 만들어보세요!');
   window.open('instagram://', '_blank');
   setTimeout(() => window.open('https://www.instagram.com', '_blank'), 500);
+}
+
+
+// ============================================================
+// VED 영상 편집 서버 연동
+// ============================================================
+function openVedSettings() {
+  closeModal();
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  const vedUrl = state.settings.vedUrl || '';
+
+  modal.innerHTML = `
+    <div class="modal-title">🎬 VED 영상 편집 서버 연동</div>
+    <div class="modal-sub">Mac/PC에서 VED 서버를 실행 후 주소를 입력하세요</div>
+
+    <div style="background:var(--bg-secondary);padding:12px;border-radius:var(--radius-sm);font-size:12px;line-height:1.7;margin-bottom:14px;">
+      <b>VED 서버 실행 방법:</b><br>
+      1. Mac 터미널에서 <code>cd ~/Downloads/VED</code><br>
+      2. <code>python3 ved_server.py</code> 실행<br>
+      3. 표시된 주소 입력 (예: http://172.30.1.72:5679)<br>
+      <br>
+      <b>외부 접속 (ngrok):</b><br>
+      <code>python3 ved_server.py --ngrok --ngrok-token YOUR_TOKEN</code>
+    </div>
+
+    <label class="form-label">VED 서버 주소</label>
+    <input type="text" id="ved-url-input" value="${vedUrl}" placeholder="http://localhost:5679 또는 ngrok 주소" style="margin-bottom:8px;">
+
+    <button class="btn" onclick="testVedConnection()" style="width:100%;margin-bottom:8px;background:var(--bg-secondary);">🔍 연결 테스트</button>
+    <div id="ved-test-result" style="font-size:12px;margin-bottom:10px;"></div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveVedUrl()">저장</button>
+    </div>
+  `;
+  overlay.classList.add('show');
+  overlay.style.display = 'flex';
+}
+
+function saveVedUrl() {
+  const url = document.getElementById('ved-url-input').value.trim().replace(/\/$/, '');
+  state.settings.vedUrl = url;
+  saveAll();
+  closeModal();
+  toast(url ? '✅ VED 서버 URL 저장됨!' : 'VED 연동 해제됨');
+}
+
+async function testVedConnection() {
+  const url = document.getElementById('ved-url-input').value.trim().replace(/\/$/, '');
+  const resultDiv = document.getElementById('ved-test-result');
+  if (!url) { resultDiv.textContent = '❌ URL을 입력해주세요'; resultDiv.style.color = 'var(--rose)'; return; }
+
+  resultDiv.textContent = '⏳ 연결 테스트 중...';
+  resultDiv.style.color = 'var(--ink-muted)';
+
+  try {
+    const res = await fetch(url + '/health', { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    if (data.ok) {
+      resultDiv.textContent = '✅ 연결 성공! ffmpeg: ' + (data.ffmpeg ? '✓' : '✗');
+      resultDiv.style.color = 'var(--moss)';
+    } else {
+      resultDiv.textContent = '⚠️ 서버 응답 이상';
+      resultDiv.style.color = 'var(--gold)';
+    }
+  } catch(err) {
+    resultDiv.textContent = '❌ 연결 실패: ' + err.message;
+    resultDiv.style.color = 'var(--rose)';
+  }
+}
+
+async function sendToVed(script) {
+  const vedUrl = state.settings.vedUrl;
+  if (!vedUrl) {
+    if (confirm('VED 서버 URL이 설정되지 않았어요.\n지금 설정할까요?')) {
+      openVedSettings();
+    }
+    return;
+  }
+
+  const profile = state.settings.profile || {};
+  const name = profile.name || '수아';
+
+  // 이번 주 사진 수집
+  let photoUrls = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(state.currentDate);
+    d.setDate(d.getDate() - i);
+    const dayData = state.daily[dateToStr(d)];
+    if (dayData && dayData.photos) {
+      dayData.photos.forEach(p => { if (p.driveUrl) photoUrls.push(p.driveUrl); });
+    }
+  }
+
+  // VED에 보낼 명령 텍스트 구성
+  const cmdText = `다이어트 쇼츠 만들어줘. 이름: ${name}. 대본: ${script.slice(0, 500)}`;
+
+  try {
+    toast('⏳ VED 서버에 전송 중...');
+
+    // VED API 호출
+    const res = await fetch(vedUrl + '/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: cmdText,
+        session_id: 'wife-diets-' + Date.now(),
+        file_path: photoUrls[0] || ''
+      })
+    });
+
+    const data = await res.json();
+    const jobId = data.job_id;
+
+    if (!jobId) {
+      toast('VED 응답: ' + (data.reply || '알 수 없는 오류'));
+      return;
+    }
+
+    toast('✅ VED 작업 시작! 진행상황을 확인할게요...');
+
+    // 진행상황 모달 표시
+    showVedProgressModal(vedUrl, jobId);
+
+  } catch(err) {
+    toast('❌ VED 연결 오류: ' + err.message);
+  }
+}
+
+function showVedProgressModal(vedUrl, jobId) {
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+
+  modal.innerHTML = `
+    <div class="modal-title">🎬 VED 영상 생성 중...</div>
+    <div style="text-align:center;padding:20px 0;">
+      <div id="ved-progress-bar" style="height:8px;background:var(--bg-secondary);border-radius:4px;margin-bottom:12px;overflow:hidden;">
+        <div id="ved-progress-fill" style="height:100%;width:0%;background:var(--sky);border-radius:4px;transition:width 0.5s;"></div>
+      </div>
+      <div id="ved-progress-pct" style="font-size:28px;font-weight:bold;color:var(--sky);margin-bottom:8px;">0%</div>
+      <div id="ved-progress-msg" style="font-size:13px;color:var(--ink-muted);">작업 시작 중...</div>
+    </div>
+    <div id="ved-result-area" style="display:none;"></div>
+    <button class="btn" style="width:100%;margin-top:12px;color:var(--ink-muted);" onclick="closeModal()">닫기 (백그라운드 계속 실행)</button>
+  `;
+  overlay.classList.add('show');
+  overlay.style.display = 'flex';
+
+  // 폴링 시작
+  pollVedJob(vedUrl, jobId);
+}
+
+async function pollVedJob(vedUrl, jobId) {
+  const maxRetry = 120; // 최대 2분
+  let retry = 0;
+
+  const poll = async () => {
+    try {
+      const res = await fetch(vedUrl + '/api/job/' + jobId);
+      const data = await res.json();
+
+      const fill = document.getElementById('ved-progress-fill');
+      const pct = document.getElementById('ved-progress-pct');
+      const msg = document.getElementById('ved-progress-msg');
+      const resultArea = document.getElementById('ved-result-area');
+
+      if (!fill) return; // 모달 닫힘
+
+      if (fill) fill.style.width = data.progress + '%';
+      if (pct) pct.textContent = data.progress + '%';
+      if (msg) msg.textContent = data.message || '처리 중...';
+
+      if (data.status === 'done' && data.download_url) {
+        // 완료!
+        if (resultArea) {
+          resultArea.style.display = 'block';
+          resultArea.innerHTML = `
+            <div style="background:var(--moss-bg);color:var(--moss);padding:12px;border-radius:var(--radius-sm);text-align:center;margin-bottom:10px;">
+              ✅ 영상 생성 완료!
+            </div>
+            <a href="${vedUrl + data.download_url}" download style="display:block;">
+              <button class="btn btn-primary" style="width:100%;">⬇️ 영상 다운로드</button>
+            </a>
+          `;
+        }
+        toast('🎉 VED 영상 생성 완료! 다운로드 버튼을 눌러주세요');
+        return;
+      }
+
+      if (data.status === 'error') {
+        if (msg) msg.textContent = '❌ 오류: ' + data.message;
+        return;
+      }
+
+      // 계속 폴링
+      if (retry++ < maxRetry) {
+        setTimeout(poll, 1000);
+      }
+    } catch(err) {
+      console.error('VED 폴링 오류:', err);
+      if (retry++ < maxRetry) setTimeout(poll, 2000);
+    }
+  };
+
+  setTimeout(poll, 1000);
 }
 
 // ============================================================
